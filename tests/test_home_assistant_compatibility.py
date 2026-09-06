@@ -30,6 +30,7 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
         from homeassistant.const import UnitOfVolume
         from custom_components.vschrudim_watermeter.sensor import WaterMeterStateSensor
 
-        self.assertEqual(WaterMeterStateSensor._attr_device_class, SensorDeviceClass.WATER)
-        self.assertEqual(WaterMeterStateSensor._attr_state_class, SensorStateClass.TOTAL_INCREASING)
-        self.assertEqual(WaterMeterStateSensor._attr_native_unit_of_measurement, UnitOfVolume.CUBIC_METERS)
+        sensor = object.__new__(WaterMeterStateSensor)
+        self.assertEqual(sensor.device_class, SensorDeviceClass.WATER)
+        self.assertEqual(sensor.state_class, SensorStateClass.TOTAL_INCREASING)
+        self.assertEqual(sensor.native_unit_of_measurement, UnitOfVolume.CUBIC_METERS)

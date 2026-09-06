@@ -2,6 +2,5 @@
   "name": "VSChrudim watermeter",
   "country": "CZ",
   "homeassistant": "2026.8.0",
-  "render_readme": true,
-  "domains": ["vschrudim_watermeter"]
+  "render_readme": true
 }
