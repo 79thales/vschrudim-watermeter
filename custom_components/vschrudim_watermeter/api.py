@@ -108,7 +108,102 @@ def _login_field_names(form: _FormParser) -> tuple[str, str, str]:
     return user_name, password_name, submit_name
 
 def _normalized(value: str) -> str:
-    return " ".join(unescape(value).replace("\xa0", " ").split()).casefold()
+    return _clean_text(value).casefold()
+
+def _clean_text(value: str) -> str:
+    """Normalize portal whitespace without changing user-visible capitalization."""
+    return " ".join(unescape(value).replace("\xa0", " ").split())
+
+def _postback(value: str) -> tuple[str, str] | None:
+    match = re.search(
+        r"__doPostBack\(\s*['\"]([^'\"]+)['\"]\s*,\s*['\"]([^'\"]+)['\"]\s*\)",
+        value,
+        re.I,
+    )
+    return match.groups() if match else None
+
+class _ConsumptionPlaceGridParser(HTMLParser):
+    """Read the verified WebForms grid like the working WebDownloader DOM code."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.found = False
+        self.rows: list[tuple[list[str], tuple[str, str] | None]] = []
+        self._table_depth = 0
+        self._row_depth = 0
+        self._cell_depth = 0
+        self._cells: list[str] = []
+        self._cell_text: list[str] = []
+        self._cell_hidden = False
+        self._row_postback: tuple[str, str] | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        values = {name.casefold(): value or "" for name, value in attrs}
+        if tag == "table":
+            identity = values.get("id", "") or values.get("name", "")
+            if self._table_depth:
+                self._table_depth += 1
+            elif identity.casefold().endswith("gvconsumptionplaces"):
+                self.found = True
+                self._table_depth = 1
+            return
+        if not self._table_depth:
+            return
+        if tag == "tr":
+            self._row_depth += 1
+            if self._row_depth == 1:
+                self._cells = []
+                self._row_postback = _postback(values.get("onclick", ""))
+            return
+        if not self._row_depth:
+            return
+        if self._row_postback is None:
+            self._row_postback = _postback(
+                values.get("onclick", "") or values.get("href", "")
+            )
+        if tag == "td":
+            self._cell_depth += 1
+            if self._cell_depth == 1:
+                classes = values.get("class", "").casefold().split()
+                style = values.get("style", "").casefold().replace(" ", "")
+                self._cell_hidden = (
+                    "hidden" in classes
+                    or "hidden" in values
+                    or "display:none" in style
+                )
+                self._cell_text = []
+            return
+        if self._cell_depth and tag in {"br", "div", "li", "p"}:
+            self._cell_text.append(" ")
+
+    def handle_data(self, data: str) -> None:
+        if self._table_depth and self._cell_depth and not self._cell_hidden:
+            self._cell_text.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if not self._table_depth:
+            return
+        if tag == "td" and self._cell_depth:
+            self._cell_depth -= 1
+            if self._cell_depth == 0 and not self._cell_hidden:
+                self._cells.append(_clean_text("".join(self._cell_text)))
+            return
+        if tag == "tr" and self._row_depth:
+            self._row_depth -= 1
+            if self._row_depth == 0 and self._cells:
+                self.rows.append((self._cells, self._row_postback))
+            return
+        if tag == "table":
+            self._table_depth -= 1
+
+def _parse_consumption_place_grid(
+    html: str,
+) -> _ConsumptionPlaceGridParser:
+    parser = _ConsumptionPlaceGridParser()
+    parser.feed(html)
+    if not parser.found:
+        raise VsChrudimProtocolError("Consumption-place grid was not found")
+    return parser
 
 def _number(value: str) -> float | None:
     try:
@@ -150,14 +245,17 @@ def _matches(value: str, fmt: str) -> bool:
 
 def parse_consumption_places(html: str) -> list[ConsumptionPlace]:
     """Extract the verified ConsumptionPlaceList WebForms grid."""
-    table_match = re.search(r'<table[^>]+(?:id|name)=["\'][^"\']*gvConsumptionPlaces[^"\']*["\'][^>]*>(.*?)</table>', html, re.I | re.S)
-    if not table_match:
-        raise VsChrudimProtocolError("Consumption-place grid was not found")
+    grid = _parse_consumption_place_grid(html)
     places: list[ConsumptionPlace] = []
-    for row in re.findall(r"<tr[^>]*>(.*?)</tr>", table_match.group(1), re.I | re.S)[1:]:
-        cells = [_normalized(re.sub(r"<[^>]+>", " ", cell)) for cell in re.findall(r"<td[^>]*>(.*?)</td>", row, re.I | re.S)]
-        if len(cells) >= 4 and cells[0]:
-            places.append(ConsumptionPlace(*((cells + [""] * 5)[:5])))
+    seen: set[str] = set()
+    for cells, _ in grid.rows:
+        if len(cells) < 4 or not cells[0]:
+            continue
+        evidence_key = _normalized(cells[0])
+        if evidence_key in seen:
+            continue
+        seen.add(evidence_key)
+        places.append(ConsumptionPlace(*((cells + [""] * 5)[:5])))
     return places
 
 class VsChrudimClient:
@@ -203,16 +301,24 @@ class VsChrudimClient:
             await self.async_login()
 
     async def _select_place(self, html: str, url: str, place: ConsumptionPlace) -> tuple[str, str]:
-        rows = re.findall(r"<tr[^>]*?(?:onclick=[\"']([^\"']+)[\"'])?[^>]*>(.*?)</tr>", html, re.I | re.S)
-        for onclick, row in rows:
-            text = _normalized(re.sub(r"<[^>]+>", " ", row))
-            if place.evidence_number in text or (place.technical_number and place.technical_number in text):
-                match = re.search(r"__doPostBack\('([^']+)'\s*,\s*'([^']+)'\)", onclick)
-                if not match:
-                    continue
+        grid = _parse_consumption_place_grid(html)
+        expected_evidence = re.sub(r"\D", "", place.evidence_number)
+        expected_technical = re.sub(r"\D", "", place.technical_number)
+        for row_index, (cells, postback) in enumerate(grid.rows):
+            if len(cells) < 2:
+                continue
+            evidence = re.sub(r"\D", "", cells[0])
+            technical = re.sub(r"\D", "", cells[1])
+            if evidence == expected_evidence or (
+                expected_technical and technical == expected_technical
+            ):
+                target, argument = postback or (
+                    "ctl00$ctl00$ContentPlaceHolder1Common$ContentPlaceHolder1$gvConsumptionPlaces",
+                    f"Show${row_index}",
+                )
                 form = _parse_form(html)
                 payload = {name: value for name, value in form.inputs.items() if name.startswith("__")}
-                payload["__EVENTTARGET"], payload["__EVENTARGUMENT"] = match.groups()
+                payload["__EVENTTARGET"], payload["__EVENTARGUMENT"] = target, argument
                 return await self._request_text("POST", urljoin(url, form.action or url), data=payload)
         raise VsChrudimProtocolError("Selected consumption place is absent from the portal grid")
 

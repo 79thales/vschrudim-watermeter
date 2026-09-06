@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.2 - 2026-09-06
+
+- Fix consumption-place discovery by excluding the portal grid's hidden cells,
+  matching the verified WebDownloader implementation.
+- Preserve the original capitalization of customer-visible place data.
+- Use the verified WebForms `Show$N` postback fallback when a row does not
+  expose its inline postback handler.
+- Add a regression fixture for the real grid structure with a hidden leading
+  cell.
+
 ## 0.3.1 - 2026-09-06
 
 - Fix ASP.NET login submission selecting the language image instead of the

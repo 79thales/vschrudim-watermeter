@@ -33,7 +33,25 @@ class ApiParserTests(unittest.TestCase):
         html = '<table id="x_gvConsumptionPlaces"><tr><th>x</th></tr><tr><td>123</td><td>456</td><td>Example 1</td><td>C-1</td><td>v1</td></tr></table>'
         place = api.parse_consumption_places(html)[0]
         self.assertEqual(place.evidence_number, "123")
-        self.assertEqual(place.address, "example 1")
+        self.assertEqual(place.address, "Example 1")
+
+    def test_parse_consumption_places_ignores_hidden_grid_cells(self):
+        html = """
+        <table id="ctl00_ctl00_ContentPlaceHolder1Common_ContentPlaceHolder1_gvConsumptionPlaces">
+          <tr><th>Internal</th><th>Evidence</th><th>Technical</th><th>Address</th><th>Contract</th></tr>
+          <tr onclick="__doPostBack('grid','Show$0')">
+            <td class="hidden">internal row key</td>
+            <td>123</td><td>456</td><td>Example Address 1</td><td>C-1</td><td>v1</td>
+          </tr>
+        </table>
+        """
+        place = api.parse_consumption_places(html)[0]
+        self.assertEqual(place.evidence_number, "123")
+        self.assertEqual(place.technical_number, "456")
+        self.assertEqual(place.address, "Example Address 1")
+        self.assertEqual(place.contract, "C-1")
+        grid = api._parse_consumption_place_grid(html)
+        self.assertEqual(grid.rows[0][1], ("grid", "Show$0"))
 
     def test_login_uses_btnlogin_not_preceding_language_image(self):
         html = """
