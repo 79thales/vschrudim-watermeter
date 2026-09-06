@@ -12,13 +12,15 @@ For a manual installation, copy `custom_components/vschrudim_watermeter` to `/co
 
 Enter the portal username and password, then select a consumption place. The default update interval is four hours, matching the portal's documented usual data publication delay; it can be changed in Reconfigure (minimum 15 minutes).
 
-The portal records a cumulative state hourly. The `Meter state` sensor uses `total_increasing` in m³. `Latest consumption` is the non-negative difference between the newest two states. It is not an instantaneous flow rate.
+The portal records a cumulative state hourly. The `Meter state` sensor uses `total_increasing` in m³ and is the statistic to select in **Settings → Dashboards → Energy → Water consumption**. `Latest consumption` is the non-negative difference between the newest two states; it is not an instantaneous flow rate.
+
+Set the all-in water/sewerage price in **Reconfigure**. The `Water price` sensor has unit `CZK/m³`; select it under **Use an entity with the current price** in the Water dashboard configuration. A value of `0` is intentionally the default until you enter your actual tariff.
 
 ## Portal compatibility
 
 VS Chrudim supplies an authenticated ASP.NET WebForms website, not a documented public API. The client follows fields, menu links, WebForms postbacks and CSV-export links found in the authenticated HTML, and fails safely when the expected structure is absent. It does not guess REST endpoints or run WebDownloader.
 
-Historical backfill is intentionally not implemented in 0.1.0: the desktop source confirms CSV export after portal-side filtering but does not provide a verified direct filter/export protocol suitable for unattended Home Assistant operation. Home Assistant retains state history after installation.
+The implementation plan for hourly history up to three years is in [HISTORY_PLAN.md](HISTORY_PLAN.md). Home Assistant retains state history after installation.
 
 ## Security
 

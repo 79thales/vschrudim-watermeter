@@ -7,7 +7,7 @@ from homeassistant import config_entries
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .api import VsChrudimAuthError, VsChrudimClient, VsChrudimConnectionError, VsChrudimError
-from .const import CONF_PLACE, CONF_SCAN_INTERVAL, DOMAIN, MIN_SCAN_INTERVAL
+from .const import CONF_PLACE, CONF_PRICE_PER_M3, CONF_SCAN_INTERVAL, DEFAULT_PRICE_PER_M3, DOMAIN, MIN_SCAN_INTERVAL
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
@@ -51,7 +51,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self.hass.config_entries.async_update_entry(self._reauth_entry, data=data)
                 await self.hass.config_entries.async_reload(self._reauth_entry.entry_id)
                 return self.async_abort(reason="reauth_successful")
-            return self.async_create_entry(title=choices[selected.identifier], data=data)
+            return self.async_create_entry(title=choices[selected.identifier], data=data, options={CONF_PRICE_PER_M3: DEFAULT_PRICE_PER_M3})
         return self.async_show_form(step_id="place", data_schema=vol.Schema({vol.Required(CONF_PLACE): vol.In(choices)}))
 
     async def async_step_reauth(self, entry_data: Mapping[str, str]):
@@ -61,7 +61,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_reconfigure(self, user_input: Mapping[str, str] | None = None):
         entry = self._get_reconfigure_entry()
         if user_input:
-            self.hass.config_entries.async_update_entry(entry, options={**entry.options, CONF_SCAN_INTERVAL: user_input[CONF_SCAN_INTERVAL]})
+            self.hass.config_entries.async_update_entry(entry, options={**entry.options, CONF_SCAN_INTERVAL: user_input[CONF_SCAN_INTERVAL], CONF_PRICE_PER_M3: user_input[CONF_PRICE_PER_M3]})
             await self.hass.config_entries.async_reload(entry.entry_id)
             return self.async_abort(reason="reconfigure_successful")
-        return self.async_show_form(step_id="reconfigure", data_schema=vol.Schema({vol.Required(CONF_SCAN_INTERVAL, default=entry.options.get(CONF_SCAN_INTERVAL, 240)): vol.All(vol.Coerce(int), vol.Range(min=int(MIN_SCAN_INTERVAL.total_seconds() / 60), max=1440))}))
+        return self.async_show_form(step_id="reconfigure", data_schema=vol.Schema({vol.Required(CONF_SCAN_INTERVAL, default=entry.options.get(CONF_SCAN_INTERVAL, 240)): vol.All(vol.Coerce(int), vol.Range(min=int(MIN_SCAN_INTERVAL.total_seconds() / 60), max=1440)), vol.Required(CONF_PRICE_PER_M3, default=entry.options.get(CONF_PRICE_PER_M3, DEFAULT_PRICE_PER_M3)): vol.All(vol.Coerce(float), vol.Range(min=0, max=1000))}))

@@ -8,10 +8,11 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN
+from .const import CONF_PRICE_PER_M3, DEFAULT_PRICE_PER_M3
 from .coordinator import VsChrudimCoordinator
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry[VsChrudimCoordinator], async_add_entities: AddEntitiesCallback) -> None:
-    async_add_entities([WaterMeterStateSensor(entry.runtime_data), LatestConsumptionSensor(entry.runtime_data)])
+    async_add_entities([WaterMeterStateSensor(entry.runtime_data), LatestConsumptionSensor(entry.runtime_data), WaterPriceSensor(entry.runtime_data, entry)])
 
 class _BaseSensor(CoordinatorEntity[VsChrudimCoordinator], SensorEntity):
     _attr_has_entity_name = True
@@ -48,3 +49,16 @@ class LatestConsumptionSensor(_BaseSensor):
     @property
     def native_value(self) -> float | None:
         return self.coordinator.data.latest_consumption_m3
+
+class WaterPriceSensor(_BaseSensor):
+    """Configured all-in water price suitable for Energy dashboard cost tracking."""
+    _attr_translation_key = "water_price"
+    _attr_native_unit_of_measurement = "CZK/m³"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    def __init__(self, coordinator: VsChrudimCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator)
+        self._entry = entry
+        self._attr_unique_id = f"{coordinator.place.identifier}_water_price"
+    @property
+    def native_value(self) -> float:
+        return float(self._entry.options.get(CONF_PRICE_PER_M3, DEFAULT_PRICE_PER_M3))
