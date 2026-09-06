@@ -39,6 +39,7 @@ class _FormParser(HTMLParser):
         self.action = ""
         self.method = "GET"
         self.inputs: dict[str, str] = {}
+        self.input_types: dict[str, str] = {}
         self.submit_names: list[str] = []
         self.links: list[tuple[str, str]] = []
         self._href = ""
@@ -52,8 +53,10 @@ class _FormParser(HTMLParser):
         elif tag == "input":
             name = values.get("name")
             if name:
+                input_type = (values.get("type", "text") or "text").lower()
                 self.inputs[name] = values.get("value", "") or ""
-                if (values.get("type", "") or "").lower() in {"submit", "image", "button"}:
+                self.input_types[name] = input_type
+                if input_type in {"submit", "image", "button"}:
                     self.submit_names.append(name)
         elif tag == "a":
             self._href = values.get("href", "") or ""
@@ -73,6 +76,36 @@ def _parse_form(html: str) -> _FormParser:
     parser = _FormParser()
     parser.feed(html)
     return parser
+
+
+def _login_field_names(form: _FormParser) -> tuple[str, str, str]:
+    """Return the actual credential fields and login submit control."""
+    user_name = next(
+        (
+            name
+            for name, input_type in form.input_types.items()
+            if input_type in {"text", "email"}
+            and any(key in name.casefold() for key in ("email", "user", "login", "jmeno"))
+        ),
+        None,
+    )
+    password_name = next(
+        (name for name, input_type in form.input_types.items() if input_type == "password"),
+        None,
+    )
+    submit_name = next(
+        (
+            name
+            for name in form.submit_names
+            if form.input_types.get(name) == "submit"
+            and "login" in name.casefold()
+            and "logout" not in name.casefold()
+        ),
+        None,
+    )
+    if not user_name or not password_name or not submit_name:
+        raise VsChrudimProtocolError("Login form fields or submit button were not found")
+    return user_name, password_name, submit_name
 
 def _normalized(value: str) -> str:
     return " ".join(unescape(value).replace("\xa0", " ").split()).casefold()
@@ -138,15 +171,10 @@ class VsChrudimClient:
     async def async_login(self) -> None:
         html, url = await self._request_text("GET", BASE_URL)
         form = _parse_form(html)
-        names = list(form.inputs)
-        user_name = next((n for n in names if any(key in n.casefold() for key in ("user", "login", "jmeno"))), None)
-        password_name = next((n for n in names if "pass" in n.casefold() or "heslo" in n.casefold()), None)
-        if not user_name or not password_name:
-            raise VsChrudimProtocolError("Login form fields were not found")
+        user_name, password_name, submit_name = _login_field_names(form)
         payload = {name: value for name, value in form.inputs.items() if name.startswith("__")}
         payload.update({user_name: self._username, password_name: self._password})
-        if form.submit_names:
-            payload[form.submit_names[0]] = form.inputs.get(form.submit_names[0], "")
+        payload[submit_name] = form.inputs.get(submit_name, "")
         response, _ = await self._request_text(form.method, urljoin(url, form.action or url), data=payload)
         if self._looks_like_login(response):
             raise VsChrudimAuthError("The portal rejected the supplied credentials")

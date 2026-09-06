@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1 - 2026-09-06
+
+- Fix ASP.NET login submission selecting the language image instead of the
+  portal's actual `btnLogin` submit control.
+- Add a regression test using the current public login-form structure.
+
 ## 0.3.0 - 2026-09-06
 
 - Add configurable persistent notifications after repeated source failures.

@@ -34,3 +34,23 @@ class ApiParserTests(unittest.TestCase):
         place = api.parse_consumption_places(html)[0]
         self.assertEqual(place.evidence_number, "123")
         self.assertEqual(place.address, "example 1")
+
+    def test_login_uses_btnlogin_not_preceding_language_image(self):
+        html = """
+        <form method="post" action="./">
+          <input type="hidden" name="__VIEWSTATE" value="state">
+          <input type="image" name="ctl00$ctl00$imgLangCS">
+          <input type="text" name="ctl00$ctl00$lvLoginForm$LoginDialog1$edEmail">
+          <input type="password" name="ctl00$ctl00$lvLoginForm$LoginDialog1$edPassword">
+          <input type="submit" name="ctl00$ctl00$lvLoginForm$LoginDialog1$btnLogin" value="Vstoupit">
+        </form>
+        """
+        form = api._parse_form(html)
+        self.assertEqual(
+            api._login_field_names(form),
+            (
+                "ctl00$ctl00$lvLoginForm$LoginDialog1$edEmail",
+                "ctl00$ctl00$lvLoginForm$LoginDialog1$edPassword",
+                "ctl00$ctl00$lvLoginForm$LoginDialog1$btnLogin",
+            ),
+        )
