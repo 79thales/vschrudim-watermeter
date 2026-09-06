@@ -16,6 +16,12 @@ The portal records a cumulative state hourly. The `Meter state` sensor uses `tot
 
 Set the all-in water/sewerage price in **Reconfigure**. The `Water price` sensor has unit `CZK/m³`; select it under **Use an entity with the current price** in the Water dashboard configuration. A value of `0` is intentionally the default until you enter your actual tariff.
 
+## Availability notifications and missing readings
+
+The integration uses Home Assistant persistent notifications. By default it reports the portal as unavailable after three consecutive failed updates, replaces the same notification on further failures, and dismisses it automatically after recovery. Authentication errors use the standard reauthentication flow instead.
+
+Every successful download is merged with readings already seen during the current runtime. Internal hourly gaps trigger up to two repeated downloads with a configurable delay. Corrected portal values replace the older value with the same timestamp. If gaps remain, one persistent notification lists their count and a short timestamp preview; it disappears when the readings are filled. Czech spring DST's nonexistent 02:00 hour is not treated as missing. All thresholds, notifications, attempt counts and delays can be changed under **Reconfigure**.
+
 ## Portal compatibility
 
 VS Chrudim supplies an authenticated ASP.NET WebForms website, not a documented public API. The client follows fields, menu links, WebForms postbacks and CSV-export links found in the authenticated HTML, and fails safely when the expected structure is absent. It does not guess REST endpoints or run WebDownloader.

@@ -3,22 +3,42 @@ name: Validate
 on:
   push:
   pull_request:
+  schedule:
+    - cron: "0 0 * * *"
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
       - run: python -m compileall -q custom_components
       - run: python -m unittest discover -s tests -v
+  home-assistant-compatibility:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        home-assistant-version:
+          - "2026.8.0"
+          - "2026.9.0"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - run: pip install "homeassistant==${{ matrix.home-assistant-version }}"
+      - run: python -m unittest tests.test_home_assistant_compatibility -v
   hassfest:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: home-assistant/actions/hassfest@master
   hacs:
     runs-on: ubuntu-latest

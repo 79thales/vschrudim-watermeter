@@ -37,7 +37,12 @@ class WaterMeterStateSensor(_BaseSensor):
         if not self.coordinator.data.readings:
             return None
         latest = self.coordinator.data.readings[-1]
-        return {"last_reading": latest.timestamp.isoformat(), "meter": latest.meter}
+        return {
+            "last_reading": latest.timestamp.isoformat(),
+            "meter": latest.meter,
+            "missing_hourly_readings": len(self.coordinator.data.missing_timestamps),
+            "recovery_attempts": self.coordinator.data.recovery_attempts,
+        }
 
 class LatestConsumptionSensor(_BaseSensor):
     _attr_translation_key = "latest_consumption"

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0 - 2026-09-06
+
+- Add configurable persistent notifications after repeated source failures.
+- Add bounded repeated downloads to recover individual missing hourly readings.
+- Merge corrected portal values by timestamp and expose gap/retry diagnostics.
+- Add Home Assistant compatibility CI for 2026.8 and 2026.9.
+
 ## 0.2.0 - 2026-09-06
 
 - Add `Water price` sensor in CZK/m³ for Home Assistant Energy water costs.

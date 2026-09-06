@@ -4,3 +4,4 @@ __pycache__/
 .coverage
 .storage/
 .env
+.vs/

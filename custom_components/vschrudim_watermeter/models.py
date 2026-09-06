@@ -25,3 +25,5 @@ class WaterMeterData:
     place: ConsumptionPlace
     readings: tuple[MeterReading, ...]
     latest_consumption_m3: float | None
+    missing_timestamps: tuple[datetime, ...] = ()
+    recovery_attempts: int = 0
