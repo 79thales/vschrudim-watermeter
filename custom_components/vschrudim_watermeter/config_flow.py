@@ -5,6 +5,7 @@ from dataclasses import asdict
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .api import VsChrudimAuthError, VsChrudimClient, VsChrudimConnectionError, VsChrudimError
 from .const import CONF_PLACE, CONF_SCAN_INTERVAL, DOMAIN, MIN_SCAN_INTERVAL
 
@@ -17,7 +18,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._reauth_entry = None
 
     async def _validate(self, user_input: Mapping[str, str]) -> None:
-        client = VsChrudimClient(self.hass.helpers.aiohttp_client.async_get_clientsession(), user_input[CONF_USERNAME], user_input[CONF_PASSWORD])
+        client = VsChrudimClient(async_get_clientsession(self.hass), user_input[CONF_USERNAME], user_input[CONF_PASSWORD])
         self._places = await client.async_get_places()
         self._credentials = dict(user_input)
 
