@@ -1,0 +1,66 @@
+"""Config and reauthentication flow."""
+from __future__ import annotations
+from collections.abc import Mapping
+from dataclasses import asdict
+import voluptuous as vol
+from homeassistant import config_entries
+from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
+from .api import VsChrudimAuthError, VsChrudimClient, VsChrudimConnectionError, VsChrudimError
+from .const import CONF_PLACE, CONF_SCAN_INTERVAL, DOMAIN, MIN_SCAN_INTERVAL
+
+class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    VERSION = 1
+    MINOR_VERSION = 1
+    def __init__(self) -> None:
+        self._credentials: dict[str, str] = {}
+        self._places = []
+        self._reauth_entry = None
+
+    async def _validate(self, user_input: Mapping[str, str]) -> None:
+        client = VsChrudimClient(self.hass.helpers.aiohttp_client.async_get_clientsession(), user_input[CONF_USERNAME], user_input[CONF_PASSWORD])
+        self._places = await client.async_get_places()
+        self._credentials = dict(user_input)
+
+    async def async_step_user(self, user_input: Mapping[str, str] | None = None):
+        errors = {}
+        if user_input:
+            try:
+                await self._validate(user_input)
+                if not self._places:
+                    errors["base"] = "no_places"
+                else:
+                    return await self.async_step_place()
+            except VsChrudimAuthError:
+                errors["base"] = "invalid_auth"
+            except VsChrudimConnectionError:
+                errors["base"] = "cannot_connect"
+            except VsChrudimError:
+                errors["base"] = "unknown"
+        return self.async_show_form(step_id="user", data_schema=vol.Schema({vol.Required(CONF_USERNAME): str, vol.Required(CONF_PASSWORD): str}), errors=errors)
+
+    async def async_step_place(self, user_input: Mapping[str, str] | None = None):
+        choices = {place.identifier: place.address or place.technical_number for place in self._places}
+        if user_input:
+            selected = next(place for place in self._places if place.identifier == user_input[CONF_PLACE])
+            unique_id = f"{self._credentials[CONF_USERNAME].casefold()}_{selected.identifier}"
+            await self.async_set_unique_id(unique_id)
+            self._abort_if_unique_id_configured()
+            data = {**self._credentials, CONF_PLACE: asdict(selected)}
+            if self._reauth_entry:
+                self.hass.config_entries.async_update_entry(self._reauth_entry, data=data)
+                await self.hass.config_entries.async_reload(self._reauth_entry.entry_id)
+                return self.async_abort(reason="reauth_successful")
+            return self.async_create_entry(title=choices[selected.identifier], data=data)
+        return self.async_show_form(step_id="place", data_schema=vol.Schema({vol.Required(CONF_PLACE): vol.In(choices)}))
+
+    async def async_step_reauth(self, entry_data: Mapping[str, str]):
+        self._reauth_entry = self._get_reauth_entry()
+        return await self.async_step_user()
+
+    async def async_step_reconfigure(self, user_input: Mapping[str, str] | None = None):
+        entry = self._get_reconfigure_entry()
+        if user_input:
+            self.hass.config_entries.async_update_entry(entry, options={**entry.options, CONF_SCAN_INTERVAL: user_input[CONF_SCAN_INTERVAL]})
+            await self.hass.config_entries.async_reload(entry.entry_id)
+            return self.async_abort(reason="reconfigure_successful")
+        return self.async_show_form(step_id="reconfigure", data_schema=vol.Schema({vol.Required(CONF_SCAN_INTERVAL, default=entry.options.get(CONF_SCAN_INTERVAL, 240)): vol.All(vol.Coerce(int), vol.Range(min=int(MIN_SCAN_INTERVAL.total_seconds() / 60), max=1440))}))
