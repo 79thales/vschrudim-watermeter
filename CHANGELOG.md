@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.3 - 2026-09-06
+
+- Give every config flow validation and configured account its own cookie jar.
+- Prevent a successful config-flow login from leaking its authenticated portal
+  state into the newly created runtime client, where the missing login form was
+  incorrectly treated as a protocol failure.
+- Isolate cookies between multiple VS Chrudim accounts and let Home Assistant
+  automatically clean up each config entry's HTTP session.
+
 ## 0.3.2 - 2026-09-06
 
 - Fix consumption-place discovery by excluding the portal grid's hidden cells,

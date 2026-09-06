@@ -2,10 +2,11 @@
 from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import asdict
+import aiohttp
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from .api import VsChrudimAuthError, VsChrudimClient, VsChrudimConnectionError, VsChrudimError
 from .const import (
     CONF_FAILURE_THRESHOLD,
@@ -35,9 +36,21 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._reauth_entry = None
 
     async def _validate(self, user_input: Mapping[str, str]) -> None:
-        client = VsChrudimClient(async_get_clientsession(self.hass), user_input[CONF_USERNAME], user_input[CONF_PASSWORD])
-        self._places = await client.async_get_places()
-        self._credentials = dict(user_input)
+        session = async_create_clientsession(
+            self.hass,
+            auto_cleanup=False,
+            cookie_jar=aiohttp.CookieJar(),
+        )
+        try:
+            client = VsChrudimClient(
+                session,
+                user_input[CONF_USERNAME],
+                user_input[CONF_PASSWORD],
+            )
+            self._places = await client.async_get_places()
+            self._credentials = dict(user_input)
+        finally:
+            session.detach()
 
     async def async_step_user(self, user_input: Mapping[str, str] | None = None):
         errors = {}
