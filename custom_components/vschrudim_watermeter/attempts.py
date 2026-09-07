@@ -70,7 +70,9 @@ class DownloadAttempt:
 
     def as_dict(self) -> dict[str, object]:
         """Serialize only the explicitly safe diagnostic fields."""
-        return asdict(self)
+        value = asdict(self)
+        value["error"] = sanitize_error_message(self.error)
+        return value
 
     @classmethod
     def from_dict(cls, value: object) -> DownloadAttempt | None:

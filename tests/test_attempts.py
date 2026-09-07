@@ -61,3 +61,16 @@ class DownloadAttemptTests(unittest.TestCase):
 
         self.assertEqual(loaded, [original])
 
+    def test_serialization_sanitizes_error_defensively(self):
+        original = attempts.DownloadAttempt(
+            started_at="2026-09-07T12:00:00+02:00",
+            finished_at="2026-09-07T12:00:01+02:00",
+            duration_ms=200,
+            result="failed",
+            error="password=credential-token-73921 https://example.invalid/private",
+        )
+
+        serialized = original.as_dict()
+
+        self.assertNotIn("credential-token-73921", serialized["error"])
+        self.assertNotIn("example.invalid", serialized["error"])
