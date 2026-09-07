@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.5 - 2026-09-07
+
+- Fix integration setup by importing the configured-price constants used by
+  the history cost backfill coordinator.
+- Add a Home Assistant compatibility regression check for the coordinator's
+  price configuration dependencies.
+
 ## 0.4.4 - 2026-09-07
 
 - Fall back to the rendered measured-state table when the portal omits its CSV

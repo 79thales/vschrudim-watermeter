@@ -26,6 +26,12 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
             with self.subTest(module=module):
                 importlib.import_module(module)
 
+    def test_coordinator_price_dependencies(self):
+        from custom_components.vschrudim_watermeter import coordinator
+
+        self.assertEqual(coordinator.CONF_PRICE_PER_M3, "price_per_m3")
+        self.assertEqual(coordinator.DEFAULT_PRICE_PER_M3, 0.0)
+
     def test_water_sensor_contract(self):
         from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
         from homeassistant.const import UnitOfVolume
