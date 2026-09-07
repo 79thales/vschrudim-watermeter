@@ -117,6 +117,67 @@ class MeasuredStatesNavigationTests(unittest.IsolatedAsyncioTestCase):
                 "https://zakaznik.vschrudim.cz/Userdata/ProfileData.aspx",
             )
 
+    async def test_submits_export_control_with_complete_webforms_payload(self):
+        client = api.VsChrudimClient(object(), "user", "password")
+        calls = []
+
+        async def request(method, url, data=None):
+            calls.append((method, url, data))
+            return (
+                "MERIDLO;CAS;STAV\nA;01.01.2026 00:00;10,000\n",
+                url,
+            )
+
+        client._request_text = request
+        content = await client._download_csv(
+            """
+            <form method="post" action="./ProfileData.aspx">
+              <input type="hidden" name="__VIEWSTATE" value="state">
+              <input type="text" name="filterFrom" value="01.01.2026">
+              <select name="period"><option value="U" selected>Custom</option></select>
+              <input type="submit" name="ctl00$btnExport" value="Export data">
+            </form>
+            """,
+            "https://zakaznik.vschrudim.cz/Userdata/ProfileData.aspx",
+        )
+
+        self.assertIn("MERIDLO;CAS;STAV", content)
+        self.assertEqual(calls[0][0], "POST")
+        self.assertEqual(
+            calls[0][1],
+            "https://zakaznik.vschrudim.cz/Userdata/ProfileData.aspx",
+        )
+        self.assertEqual(
+            calls[0][2],
+            {
+                "__VIEWSTATE": "state",
+                "filterFrom": "01.01.2026",
+                "period": "U",
+                "ctl00$btnExport": "Export data",
+            },
+        )
+
+    async def test_submits_named_html_export_button(self):
+        client = api.VsChrudimClient(object(), "user", "password")
+        calls = []
+
+        async def request(method, url, data=None):
+            calls.append((method, url, data))
+            return ("MERIDLO;CAS;STAV\n", url)
+
+        client._request_text = request
+        await client._download_csv(
+            """
+            <form method="post" action="./ProfileData.aspx">
+              <input type="hidden" name="__VIEWSTATE" value="state">
+              <button name="downloadData" value="export">Stáhnout soubor</button>
+            </form>
+            """,
+            "https://zakaznik.vschrudim.cz/Userdata/ProfileData.aspx",
+        )
+
+        self.assertEqual(calls[0][2]["downloadData"], "export")
+
     async def test_uses_verified_readings_url_and_requires_filter(self):
         client = api.VsChrudimClient(object(), "user", "password")
         calls = []

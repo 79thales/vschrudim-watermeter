@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.2 - 2026-09-07
+
+- Match the working WebDownloader export flow by supporting both direct export
+  links and WebForms export buttons.
+- Submit the complete current filter form, including its text fields, selected
+  values and ASP.NET state, when the portal exposes export as a button.
+- Preserve authentication and CSV-header validation for every candidate.
+- Add regression coverage for the WebForms export-button response.
+
 ## 0.4.1 - 2026-09-07
 
 - Recognize the portal's `DocumentShow.aspx` history export even when its link

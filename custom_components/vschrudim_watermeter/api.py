@@ -41,6 +41,7 @@ class _FormParser(HTMLParser):
         self.inputs: dict[str, str] = {}
         self.input_types: dict[str, str] = {}
         self.submit_names: list[str] = []
+        self.submit_descriptions: dict[str, str] = {}
         self.links: list[tuple[str, str]] = []
         self.selects: dict[str, str] = {}
         self._select_name = ""
@@ -48,6 +49,9 @@ class _FormParser(HTMLParser):
         self._first_option = ""
         self._href = ""
         self._text: list[str] = []
+        self._button_name = ""
+        self._button_value = ""
+        self._button_text: list[str] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         values = dict(attrs)
@@ -62,9 +66,36 @@ class _FormParser(HTMLParser):
                 self.input_types[name] = input_type
                 if input_type in {"submit", "image", "button"}:
                     self.submit_names.append(name)
+                    self.submit_descriptions[name] = " ".join(
+                        filter(
+                            None,
+                            (
+                                name,
+                                values.get("value"),
+                                values.get("title"),
+                                values.get("aria-label"),
+                                values.get("alt"),
+                                values.get("onclick"),
+                            ),
+                        )
+                    )
         elif tag == "a":
             self._href = values.get("href", "") or ""
             self._text = []
+        elif tag == "button":
+            self._button_name = values.get("name", "") or ""
+            self._button_value = values.get("value", "") or ""
+            self._button_text = [
+                value
+                for value in (
+                    self._button_name,
+                    self._button_value,
+                    values.get("title"),
+                    values.get("aria-label"),
+                    values.get("onclick"),
+                )
+                if value
+            ]
         elif tag == "select":
             self._select_name = values.get("name", "") or ""
             self._selected_option = ""
@@ -79,12 +110,24 @@ class _FormParser(HTMLParser):
     def handle_data(self, data: str) -> None:
         if self._href:
             self._text.append(data)
+        if self._button_name:
+            self._button_text.append(data)
 
     def handle_endtag(self, tag: str) -> None:
         if tag == "a" and self._href:
             self.links.append((" ".join(self._text).strip(), self._href))
             self._href = ""
             self._text = []
+        elif tag == "button" and self._button_name:
+            self.inputs[self._button_name] = self._button_value
+            self.input_types[self._button_name] = "button"
+            self.submit_names.append(self._button_name)
+            self.submit_descriptions[self._button_name] = " ".join(
+                self._button_text
+            )
+            self._button_name = ""
+            self._button_value = ""
+            self._button_text = []
         elif tag == "select" and self._select_name:
             self.selects[self._select_name] = (
                 self._selected_option or self._first_option
@@ -172,6 +215,36 @@ def _webforms_payload(form: _FormParser) -> dict[str, str]:
     }
     payload.update(form.selects)
     return payload
+
+
+def _complete_form_payload(form: _FormParser) -> dict[str, str]:
+    """Build the successful-control payload used by browser FormData."""
+    payload = {
+        name: value
+        for name, value in form.inputs.items()
+        if form.input_types.get(name) not in {"submit", "image", "button"}
+    }
+    payload.update(form.selects)
+    return payload
+
+
+def _export_candidate_score(value: str) -> int:
+    """Score export controls using the same signals as WebDownloader."""
+    normalized = _normalized(value)
+    score = 0
+    if re.search(r"\.csv(?:$|[?&#])", normalized):
+        score += 100
+    if "documentshow.aspx" in normalized:
+        score += 100
+    if "csv" in normalized:
+        score += 80
+    if "stáhn" in normalized or "stahn" in normalized:
+        score += 50
+    if "export" in normalized or "download" in normalized:
+        score += 45
+    if any(word in normalized for word in ("stav", "data", "soubor")):
+        score += 20
+    return score
 
 class _ConsumptionPlaceGridParser(HTMLParser):
     """Read the verified WebForms grid like the working WebDownloader DOM code."""
@@ -525,16 +598,35 @@ class VsChrudimClient:
 
     async def _download_csv(self, html: str, url: str) -> str:
         form = _parse_form(html)
+        candidates: list[tuple[int, str, str]] = []
         for text, href in form.links:
-            normalized_link = _normalized(text + " " + href)
-            href_casefold = href.casefold()
-            if href_casefold.startswith("javascript:"):
+            if href.casefold().startswith("javascript:"):
                 continue
-            if "csv" not in normalized_link and "documentshow.aspx" not in href_casefold:
+            score = _export_candidate_score(text + " " + href)
+            if score >= 45:
+                candidates.append((score, "link", href))
+        for name in form.submit_names:
+            score = _export_candidate_score(form.submit_descriptions.get(name, name))
+            if score >= 45:
+                candidates.append((score, "submit", name))
+
+        for _, kind, value in sorted(candidates, reverse=True):
+            if kind == "link":
+                content, _ = await self._request_text("GET", urljoin(url, value))
+            else:
+                payload = _complete_form_payload(form)
+                payload[value] = form.inputs.get(value, "")
+                content, _ = await self._request_text(
+                    form.method if form.method in {"GET", "POST"} else "POST",
+                    urljoin(url, form.action or url),
+                    data=payload,
+                )
+            if self._looks_like_login(content):
+                self._logged_in = False
+                raise VsChrudimAuthError("Authenticated session expired")
+            if not re.search(r"MERIDLO\s*;\s*CAS\s*;\s*STAV", content, re.I):
                 continue
-            content, _ = await self._request_text("GET", urljoin(url, href))
-            if re.search(r"MERIDLO\s*;\s*CAS\s*;\s*STAV", content, re.I):
-                return content
+            return content
         raise VsChrudimProtocolError("The portal did not expose a verified CSV export link")
 
     @staticmethod
