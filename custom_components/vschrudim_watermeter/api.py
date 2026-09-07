@@ -16,7 +16,7 @@ from urllib.parse import urljoin
 import aiohttp
 
 from .calculation import latest_consumption
-from .const import BASE_URL, PLACES_URL
+from .const import BASE_URL, PLACES_URL, READINGS_URL
 from .models import ConsumptionPlace, MeterReading, WaterMeterData
 
 _DATE_FORMATS: Final = ("%d.%m.%Y %H:%M", "%d.%m.%Y %H:%M:%S", "%d.%m.%Y")
@@ -116,11 +116,21 @@ def _clean_text(value: str) -> str:
 
 def _postback(value: str) -> tuple[str, str] | None:
     match = re.search(
-        r"__doPostBack\(\s*['\"]([^'\"]+)['\"]\s*,\s*['\"]([^'\"]+)['\"]\s*\)",
+        r"__doPostBack\(\s*['\"]([^'\"]+)['\"]\s*,\s*['\"]([^'\"]*)['\"]\s*\)",
         value,
         re.I,
     )
     return match.groups() if match else None
+
+def _looks_like_readings_page(html: str) -> bool:
+    """Return whether the verified readings filter is present."""
+    return bool(
+        re.search(
+            r"(?:id|name)=[\"'][^\"']*(?:edGraphLength|GraphFilter1_(?:btnRenew|edDateFrom|hfDateFrom))[^\"']*[\"']",
+            html,
+            re.I,
+        )
+    )
 
 class _ConsumptionPlaceGridParser(HTMLParser):
     """Read the verified WebForms grid like the working WebDownloader DOM code."""
@@ -323,11 +333,45 @@ class VsChrudimClient:
         raise VsChrudimProtocolError("Selected consumption place is absent from the portal grid")
 
     async def _open_measured_states(self, html: str, url: str) -> tuple[str, str]:
+        if _looks_like_readings_page(html):
+            return html, url
+
+        # WebDownloader uses this address after the selected place has been
+        # stored in the authenticated portal session. Never accept the page
+        # unless its verified readings filter is actually present.
+        direct_html, direct_url = await self._request_text("GET", READINGS_URL)
+        if self._looks_like_login(direct_html):
+            self._logged_in = False
+            raise VsChrudimAuthError("Authenticated session expired")
+        if _looks_like_readings_page(direct_html):
+            return direct_html, direct_url
+
         form = _parse_form(html)
         for text, href in form.links:
-            if _normalized(text) == "naměřené stavy" and not href.casefold().startswith("javascript:"):
-                return await self._request_text("GET", urljoin(url, href))
-        raise VsChrudimProtocolError("The portal did not expose a navigable 'Naměřené stavy' link")
+            label = _normalized(text)
+            if label != "naměřené stavy" and "profiledata" not in href.casefold():
+                continue
+            if postback := _postback(href):
+                payload = {
+                    name: value
+                    for name, value in form.inputs.items()
+                    if name.startswith("__")
+                }
+                payload["__EVENTTARGET"], payload["__EVENTARGUMENT"] = postback
+                candidate = await self._request_text(
+                    "POST",
+                    urljoin(url, form.action or url),
+                    data=payload,
+                )
+            elif not href.casefold().startswith("javascript:"):
+                candidate = await self._request_text("GET", urljoin(url, href))
+            else:
+                continue
+            if _looks_like_readings_page(candidate[0]):
+                return candidate
+        raise VsChrudimProtocolError(
+            "The portal did not expose the verified readings filter"
+        )
 
     async def _download_csv(self, html: str, url: str) -> str:
         form = _parse_form(html)

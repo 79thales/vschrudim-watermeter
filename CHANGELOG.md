@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.4 - 2026-09-07
+
+- Open measured states through the portal's verified
+  `/Userdata/ProfileData.aspx` route after selecting a consumption place.
+- Validate the presence of the readings period filter before downloading data.
+- Support the actual `MainMenu1$btnProfileData` WebForms postback as a fallback,
+  including its empty event argument.
+- Add regression tests for direct and postback-based readings navigation.
+
 ## 0.3.3 - 2026-09-06
 
 - Give every config flow validation and configured account its own cookie jar.

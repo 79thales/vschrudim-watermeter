@@ -23,3 +23,4 @@ DEFAULT_SCAN_INTERVAL = timedelta(hours=4)
 MIN_SCAN_INTERVAL = timedelta(minutes=15)
 BASE_URL = "https://zakaznik.vschrudim.cz/"
 PLACES_URL = "https://zakaznik.vschrudim.cz/ConsumptionPlaceList.aspx"
+READINGS_URL = "https://zakaznik.vschrudim.cz/Userdata/ProfileData.aspx"

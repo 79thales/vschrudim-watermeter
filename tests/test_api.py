@@ -72,3 +72,51 @@ class ApiParserTests(unittest.TestCase):
                 "ctl00$ctl00$lvLoginForm$LoginDialog1$btnLogin",
             ),
         )
+
+class MeasuredStatesNavigationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_uses_verified_readings_url_and_requires_filter(self):
+        client = api.VsChrudimClient(object(), "user", "password")
+        calls = []
+
+        async def request(method, url, data=None):
+            calls.append((method, url, data))
+            return (
+                '<select name="ctl00$GraphFilter1$edGraphLength">'
+                '<option value="W">Week</option></select>',
+                url,
+            )
+
+        client._request_text = request
+        html, url = await client._open_measured_states("<html></html>", "https://example.invalid/detail")
+        self.assertTrue(api._looks_like_readings_page(html))
+        self.assertEqual(url, api.READINGS_URL)
+        self.assertEqual(calls, [("GET", api.READINGS_URL, None)])
+
+    async def test_replays_actual_measured_states_postback_as_fallback(self):
+        client = api.VsChrudimClient(object(), "user", "password")
+        calls = []
+        selected_html = """
+        <form method="post" action="./detail">
+          <input type="hidden" name="__VIEWSTATE" value="state">
+          <a href="javascript:__doPostBack('ctl00$ctl00$MainMenu1$btnProfileData','')">Naměřené stavy</a>
+        </form>
+        """
+
+        async def request(method, url, data=None):
+            calls.append((method, url, data))
+            if method == "GET":
+                return "<html>not the readings page</html>", url
+            return '<input id="x_GraphFilter1_btnRenew" value="Aktualizovat">', url
+
+        client._request_text = request
+        html, _ = await client._open_measured_states(
+            selected_html,
+            "https://zakaznik.vschrudim.cz/detail",
+        )
+        self.assertTrue(api._looks_like_readings_page(html))
+        self.assertEqual(calls[-1][0], "POST")
+        self.assertEqual(
+            calls[-1][2]["__EVENTTARGET"],
+            "ctl00$ctl00$MainMenu1$btnProfileData",
+        )
+        self.assertEqual(calls[-1][2]["__EVENTARGUMENT"], "")
