@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Document the required Energy dashboard configuration for historical water
+  costs and distinguish the unit-price sensor from the cumulative-cost entity.
+
 ## 0.4.7 - 2026-09-07
 
 - Treat a filtered range without an export action as the beginning of the

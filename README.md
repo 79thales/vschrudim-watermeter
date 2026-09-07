@@ -14,7 +14,30 @@ Enter the portal username and password, then select a consumption place. The def
 
 The portal records a cumulative state hourly. The `Meter state` sensor uses `total_increasing` in m³ and is the statistic to select in **Settings → Dashboards → Energy → Water consumption**. Completed portal hours are imported under that real sensor ID, so the Energy dashboard can use the historical readings and still allow an entity-based current price. `Latest consumption` is the non-negative difference between the newest two states; it is not an instantaneous flow rate.
 
-Set the all-in water/sewerage price in **Reconfigure**. A value of `0` is intentionally the default until you enter your actual tariff. The integration exposes both `Water price` (`CZK/m³`) and `Total water cost` (`CZK`). Because Home Assistant's fixed/current-price helper only calculates future live state changes, select `Total water cost` under **Use an entity tracking the total costs** to see costs for the hourly history imported by this integration. Changing the integration price restarts the idempotent history scan so existing hourly cost statistics are recalculated with the new tariff.
+Set the all-in water/sewerage price in **Reconfigure**. A value of `0` is intentionally the default until you enter your actual tariff. The integration exposes both `Water price` (`CZK/m³`) and `Total water cost` (`CZK`). Changing the integration price restarts the idempotent history scan so existing hourly cost statistics are recalculated with the new tariff.
+
+### Energy dashboard and historical costs
+
+Use the integration's cumulative cost entity when configuring water in the
+Home Assistant Energy dashboard:
+
+1. Open **Settings → Dashboards → Energy → Water** and add or edit the water
+   source.
+2. Select **Meter state** as **Water consumption**.
+3. Under cost tracking, choose **Use an entity tracking the total costs**.
+4. Select **Total water cost** as the total-cost entity and save.
+
+This selection is important for imported history. Home Assistant's **fixed
+price** and **current price entity** modes create a helper that starts at zero
+and calculates only future live changes. They do not retroactively price the
+hourly readings imported by this integration. `Total water cost`, on the other
+hand, contains matching hourly cost statistics, so both historical consumption
+and its cost are shown. For each interval, the displayed cost change is the
+meter-state change multiplied by the price configured in **Reconfigure**.
+
+`Water price` is the current unit-price sensor and is not the cumulative cost
+entity. If the Energy dashboard already shows the saved fixed-price mode, edit
+the source and switch it to `Total water cost` as described above.
 
 ## Historical data
 
