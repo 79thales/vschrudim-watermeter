@@ -6,6 +6,7 @@ portal; it does not invent undocumented endpoints or persist session cookies.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from html import unescape
 from html.parser import HTMLParser
@@ -18,7 +19,12 @@ import aiohttp
 
 from .calculation import latest_consumption
 from .const import BASE_URL, PLACES_URL, READINGS_URL
-from .models import ConsumptionPlace, MeterReading, WaterMeterData
+from .models import (
+    ConsumptionPlace,
+    DownloadMetadata,
+    MeterReading,
+    WaterMeterData,
+)
 
 _DATE_FORMATS: Final = ("%d.%m.%Y %H:%M", "%d.%m.%Y %H:%M:%S", "%d.%m.%Y")
 
@@ -30,6 +36,15 @@ class VsChrudimAuthError(VsChrudimError):
 
 class VsChrudimProtocolError(VsChrudimError):
     """The portal markup changed or did not contain expected data."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        download_metadata: DownloadMetadata | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.download_metadata = download_metadata or DownloadMetadata()
 
 class VsChrudimConnectionError(VsChrudimError):
     """The portal could not be reached."""
@@ -346,60 +361,82 @@ class _ConsumptionPlaceGridParser(HTMLParser):
             self._table_depth -= 1
 
 
+@dataclass(slots=True)
+class _HtmlTableContext:
+    """One table currently being parsed, including layout-nested tables."""
+
+    rows: list[list[str]]
+    row_depth: int = 0
+    cell_depth: int = 0
+    cells: list[str] | None = None
+    cell_text: list[str] | None = None
+
+
 class _ReadingsTableParser(HTMLParser):
-    """Extract HTML tables using the same fallback principle as WebDownloader."""
+    """Extract every table while preserving text inside wrapped table cells."""
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.tables: list[list[list[str]]] = []
-        self._table_depth = 0
-        self._rows: list[list[str]] = []
-        self._row_depth = 0
-        self._cells: list[str] = []
-        self._cell_depth = 0
-        self._cell_text: list[str] = []
+        self._table_stack: list[_HtmlTableContext] = []
+
+    @property
+    def _current(self) -> _HtmlTableContext | None:
+        return self._table_stack[-1] if self._table_stack else None
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag == "table":
-            if self._table_depth == 0:
-                self._rows = []
-            self._table_depth += 1
+            self._table_stack.append(_HtmlTableContext(rows=[]))
             return
-        if self._table_depth != 1:
+        context = self._current
+        if context is None:
             return
         if tag == "tr":
-            self._row_depth += 1
-            if self._row_depth == 1:
-                self._cells = []
+            context.row_depth += 1
+            if context.row_depth == 1:
+                context.cells = []
             return
-        if self._row_depth == 1 and tag in {"th", "td"}:
-            self._cell_depth += 1
-            if self._cell_depth == 1:
-                self._cell_text = []
-        elif self._cell_depth and tag == "br":
-            self._cell_text.append(" ")
+        if context.row_depth == 1 and tag in {"th", "td"}:
+            context.cell_depth += 1
+            if context.cell_depth == 1:
+                context.cell_text = []
+            return
+        if context.cell_depth and tag in {"br", "div", "p", "li"}:
+            assert context.cell_text is not None
+            context.cell_text.append(" ")
 
     def handle_data(self, data: str) -> None:
-        if self._table_depth == 1 and self._row_depth == 1 and self._cell_depth:
-            self._cell_text.append(data)
+        context = self._current
+        if context and context.row_depth == 1 and context.cell_depth:
+            assert context.cell_text is not None
+            context.cell_text.append(data)
 
     def handle_endtag(self, tag: str) -> None:
-        if not self._table_depth:
+        context = self._current
+        if context is None:
             return
-        if self._table_depth == 1 and tag in {"th", "td"} and self._cell_depth:
-            self._cell_depth -= 1
-            if self._cell_depth == 0:
-                self._cells.append(_clean_text("".join(self._cell_text)))
+        if tag in {"th", "td"} and context.row_depth == 1 and context.cell_depth:
+            context.cell_depth -= 1
+            if context.cell_depth == 0:
+                assert context.cells is not None
+                assert context.cell_text is not None
+                context.cells.append(_clean_text("".join(context.cell_text)))
+                context.cell_text = None
             return
-        if self._table_depth == 1 and tag == "tr" and self._row_depth:
-            self._row_depth -= 1
-            if self._row_depth == 0 and self._cells:
-                self._rows.append(self._cells)
+        if tag == "tr" and context.row_depth:
+            context.row_depth -= 1
+            if context.row_depth == 0 and context.cells:
+                context.rows.append(context.cells)
+                context.cells = None
+            return
+        if tag in {"div", "p", "li"} and context.cell_depth:
+            assert context.cell_text is not None
+            context.cell_text.append(" ")
             return
         if tag == "table":
-            self._table_depth -= 1
-            if self._table_depth == 0 and self._rows:
-                self.tables.append(self._rows)
+            finished = self._table_stack.pop()
+            if finished.rows:
+                self.tables.append(finished.rows)
 
 
 def _parse_consumption_place_grid(
@@ -489,64 +526,65 @@ def parse_readings_html(content: str) -> list[MeterReading]:
     """Parse the measured-state HTML table when no export control is rendered."""
     parser = _ReadingsTableParser()
     parser.feed(content)
-    best_headers: list[str] = []
-    best_rows: list[list[str]] = []
-    for table in parser.tables:
-        if not table:
-            continue
-        dated_rows = [row for row in table[1:] if any(_parse_table_datetime(cell) for cell in row)]
-        if len(dated_rows) > len(best_rows):
-            best_headers = table[0]
-            best_rows = dated_rows
-    if not best_rows:
-        return []
-
-    headers = [_csv_header_key(value) for value in best_headers]
-    date_index = next(
-        (index for index, value in enumerate(headers) if "cas" in value or "datum" in value),
-        None,
-    )
-    state_index = next(
-        (index for index, value in enumerate(headers) if "stav" in value or "odecet" in value),
-        None,
-    )
-    meter_index = next(
-        (index for index, value in enumerate(headers) if "meridlo" in value),
-        None,
-    )
-    readings: dict[datetime, MeterReading] = {}
-    for row in best_rows:
-        if date_index is not None and date_index < len(row):
-            timestamp = _parse_table_datetime(row[date_index])
-        else:
-            timestamp = next(
+    # A date-shaped value and a number are not sufficient evidence: the page
+    # contains layout and filter tables too.  Require a deterministic header
+    # row with a time/date and a meter-state column, then use those exact
+    # columns.  WebForms commonly wraps headings in spans and places the data
+    # table inside another layout table, both of which _ReadingsTableParser
+    # deliberately preserves.
+    candidates: list[tuple[tuple[int, int, int, int], list[MeterReading]]] = []
+    for table_index, table in enumerate(parser.tables):
+        for header_index, header_row in enumerate(table[:5]):
+            headers = [_csv_header_key(value) for value in header_row]
+            date_index = next(
                 (
-                    parsed
-                    for cell in row
-                    if (parsed := _parse_table_datetime(cell)) is not None
+                    index
+                    for index, value in enumerate(headers)
+                    if "cas" in value or "datum" in value
                 ),
                 None,
             )
-        if timestamp is None:
-            continue
-        state = (
-            _parse_table_number(row[state_index])
-            if state_index is not None and state_index < len(row)
-            else next(
+            state_index = next(
                 (
-                    value
-                    for cell in row
-                    if _parse_table_datetime(cell) is None
-                    and (value := _parse_table_number(cell)) is not None
+                    index
+                    for index, value in enumerate(headers)
+                    if "stav" in value or "odecet" in value
                 ),
                 None,
             )
-        )
-        if state is None:
-            continue
-        meter = row[meter_index] if meter_index is not None and meter_index < len(row) else ""
-        readings[timestamp] = MeterReading(timestamp, state, meter)
-    return sorted(readings.values(), key=lambda item: item.timestamp)
+            if date_index is None or state_index is None:
+                continue
+            meter_index = next(
+                (index for index, value in enumerate(headers) if "meridlo" in value),
+                None,
+            )
+            readings: dict[datetime, MeterReading] = {}
+            for row in table[header_index + 1 :]:
+                if max(date_index, state_index) >= len(row):
+                    continue
+                timestamp = _parse_table_datetime(row[date_index])
+                state = _parse_table_number(row[state_index])
+                if timestamp is None or state is None:
+                    continue
+                meter = (
+                    row[meter_index]
+                    if meter_index is not None and meter_index < len(row)
+                    else ""
+                )
+                readings[timestamp] = MeterReading(timestamp, state, meter)
+            if readings:
+                candidates.append(
+                    (
+                        (
+                            len(readings),
+                            1 if meter_index is not None else 0,
+                            -table_index,
+                            -header_index,
+                        ),
+                        sorted(readings.values(), key=lambda item: item.timestamp),
+                    )
+                )
+    return max(candidates, default=((0, 0, 0, 0), []), key=lambda item: item[0])[1]
 
 
 def _matches(value: str, fmt: str) -> bool:
@@ -607,8 +645,15 @@ class VsChrudimClient:
         html, url = await self._request_text("GET", PLACES_URL)
         selected_html, selected_url = await self._select_place(html, url, place)
         readings_html, readings_url = await self._open_measured_states(selected_html, selected_url)
-        readings = await self._read_readings(readings_html, readings_url)
-        return WaterMeterData(place, readings, latest_consumption(readings))
+        readings, metadata = await self._read_readings_with_metadata(
+            readings_html, readings_url
+        )
+        return WaterMeterData(
+            place,
+            readings,
+            latest_consumption(readings),
+            download_metadata=metadata,
+        )
 
     async def async_get_history(
         self,
@@ -644,15 +689,33 @@ class VsChrudimClient:
         return inside
 
     async def _read_readings(self, html: str, url: str) -> tuple[MeterReading, ...]:
+        """Compatibility wrapper for callers that only need the readings."""
+        readings, _ = await self._read_readings_with_metadata(html, url)
+        return readings
+
+    async def _read_readings_with_metadata(
+        self, html: str, url: str
+    ) -> tuple[tuple[MeterReading, ...], DownloadMetadata]:
         """Prefer the verified export and fall back to the rendered data table."""
         try:
-            csv = await self._download_csv(html, url)
-        except VsChrudimProtocolError:
+            csv, metadata = await self._download_csv_with_metadata(html, url)
+        except VsChrudimProtocolError as err:
             table_readings = tuple(parse_readings_html(html))
             if table_readings:
-                return table_readings
+                metadata = replace(
+                    err.download_metadata,
+                    source="html_table",
+                    html_table_detected=True,
+                )
+                return table_readings, metadata
             raise
-        return tuple(parse_readings_csv(csv))
+        readings = tuple(parse_readings_csv(csv))
+        if readings:
+            return readings, metadata
+        raise VsChrudimProtocolError(
+            "The portal returned a CSV without valid water readings",
+            download_metadata=metadata,
+        )
 
     async def _ensure_login(self) -> None:
         if not self._logged_in:
@@ -803,24 +866,48 @@ class VsChrudimClient:
         return response
 
     async def _download_csv(self, html: str, url: str) -> str:
+        """Compatibility wrapper returning only validated CSV content."""
+        content, _ = await self._download_csv_with_metadata(html, url)
+        return content
+
+    async def _download_csv_with_metadata(
+        self, html: str, url: str
+    ) -> tuple[str, DownloadMetadata]:
         form = _parse_form(html)
-        candidates: list[tuple[int, str, str]] = []
+        candidates: list[tuple[int, str, str, str]] = []
         for text, href in form.links:
-            if href.casefold().startswith("javascript:"):
-                continue
             score = _export_candidate_score(text + " " + href)
             if score >= 45:
-                candidates.append((score, "link", href))
+                postback = _postback(href)
+                if href.casefold().startswith("javascript:"):
+                    # A verified LinkButton is a supported WebForms action;
+                    # arbitrary JavaScript is deliberately never evaluated.
+                    if postback:
+                        candidates.append((score, "postback", postback[0], postback[1]))
+                else:
+                    candidates.append((score, "link", href, ""))
         for name in form.submit_names:
             score = _export_candidate_score(form.submit_descriptions.get(name, name))
             if score >= 45:
-                candidates.append((score, "submit", name))
+                candidates.append((score, "submit", name, ""))
 
         attempted = 0
-        for _, kind, value in sorted(candidates, reverse=True):
+        found = len(candidates)
+        for _, kind, value, argument in sorted(candidates, reverse=True):
             attempted += 1
             if kind == "link":
                 content, _ = await self._request_text("GET", urljoin(url, value))
+                source = "csv_link"
+            elif kind == "postback":
+                payload = _complete_form_payload(form)
+                payload["__EVENTTARGET"] = value
+                payload["__EVENTARGUMENT"] = argument
+                content, _ = await self._request_text(
+                    "POST",
+                    urljoin(url, form.action or url),
+                    data=payload,
+                )
+                source = "csv_postback"
             else:
                 payload = _complete_form_payload(form)
                 payload[value] = form.inputs.get(value, "")
@@ -829,17 +916,30 @@ class VsChrudimClient:
                     urljoin(url, form.action or url),
                     data=payload,
                 )
+                source = "csv_submit"
             if self._looks_like_login(content):
                 self._logged_in = False
                 raise VsChrudimAuthError("Authenticated session expired")
             if not _has_readings_csv_header(content):
                 continue
-            return content
+            return content, DownloadMetadata(
+                source=source,
+                export_candidates_found=found,
+                export_candidates_attempted=attempted,
+            )
+        metadata = DownloadMetadata(
+            export_candidates_found=found,
+            export_candidates_attempted=attempted,
+        )
         if attempted:
             raise VsChrudimProtocolError(
-                f"The portal returned no valid water-reading CSV from {attempted} export candidate(s)"
+                f"The portal returned no valid water-reading CSV from {attempted} export candidate(s)",
+                download_metadata=metadata,
             )
-        raise VsChrudimProtocolError(_MISSING_EXPORT_ERROR)
+        raise VsChrudimProtocolError(
+            _MISSING_EXPORT_ERROR,
+            download_metadata=metadata,
+        )
 
     @staticmethod
     def _looks_like_login(html: str) -> bool:

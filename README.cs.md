@@ -14,22 +14,67 @@ Při ruční instalaci zkopírujte složku `custom_components/vschrudim_watermet
 
 Zadejte uživatelské jméno a heslo do portálu a vyberte odběrné místo. Výchozí interval aktualizace je jedna hodina, protože portál zaznamenává odečty po hodinách; lze ho změnit přes **Přenastavit** (minimálně 15 minut). Uložený uživatelský interval zůstává zachován i po aktualizaci integrace.
 
-Portál poskytuje kumulativní stav vodoměru po hodinách. Senzor `Meter state` má třídu `total_increasing`, jednotku m³ a je určen pro výběr v **Nastavení → Nástěnky → Energie → Spotřeba vody**. Dokončené hodiny z portálu jsou importovány přímo pod tímto ID senzoru, takže panel Energie pracuje i se zpětně načtenou historií. `Latest consumption` je nezáporný rozdíl mezi dvěma posledními stavy; nejedná se o okamžitý průtok.
+Portál poskytuje kumulativní stav vodoměru po hodinách. `Meter state` je živý
+zobrazovací senzor v m³. Dokončené hodiny z portálu zapisuje jediný externí
+zapisovač statistik integrace; živý senzor a import tak nevytvářejí dvě
+konkurenční součtové statistiky Recorderu. `Latest consumption` je nezáporný
+rozdíl mezi dvěma posledními stavy; nejedná se o okamžitý průtok.
 
 Celkovou cenu vody a stočného nastavte přes **Přenastavit**. Výchozí hodnota `0` je záměrná, dokud nezadáte vlastní tarif. Integrace vytváří senzory `Water price` (`CZK/m³`) a `Total water cost` (`CZK`). Změna ceny spustí nový idempotentní průchod historií, aby se hodinové náklady přepočítaly podle aktuálního tarifu.
 
 ### Panel Energie a historické náklady
 
-Pro zobrazení nákladů ze zpětně importované historie nastavte zdroj vody v panelu Energie takto:
+Pro zobrazení nákladů ze zpětně importované historie nastavte zdroj vody v
+panelu Energie takto:
 
 1. Otevřete **Nastavení → Nástěnky → Energie → Voda** a přidejte nebo upravte zdroj vody.
-2. Jako **Spotřebu vody** zvolte `Meter state`.
+2. Jako **Spotřebu vody** zvolte `Water consumption` od **VSChrudim
+   watermeter**. Jde o externí statistiku s ID
+   `vschrudim_watermeter:<entry_id>_water_consumption`, nikoli `sensor.*`.
+   Recorder vyžaduje malé znaky, proto se `<entry_id>` převede na malá písmena,
+   pokud Home Assistant používá velké znaky ID konfigurační položky.
 3. V části nákladů vyberte **Použít entitu sledující celkové náklady**.
-4. Jako entitu celkových nákladů zvolte `Total water cost` a nastavení uložte.
+4. Jako statistiku celkových nákladů zvolte `Water cost` od **VSChrudim
+   watermeter**. Její ID je `vschrudim_watermeter:<entry_id>_water_cost`.
 
-Tato volba je pro importovanou historii důležitá. Režimy Home Assistantu **Použít fixní cenu** a **Použít entitu s aktuální cenou** vytvářejí pomocný senzor, který začne na nule a počítá pouze budoucí živé změny. Zpětně importované hodinové odečty neoceňují. `Total water cost` naopak obsahuje odpovídající hodinové statistiky nákladů, proto se zobrazí jak historická spotřeba, tak její cena. Náklad za interval odpovídá změně stavu vodoměru vynásobené cenou nastavenou přes **Přenastavit**.
+Tato volba je pro importovanou historii důležitá. Režimy Home Assistantu
+**Použít fixní cenu** a **Použít entitu s aktuální cenou** vytvářejí pomocný
+senzor, který začne na nule a počítá pouze budoucí živé změny. Zpětně
+importované hodinové odečty neoceňují. Statistika `Water cost` naopak obsahuje
+odpovídající hodinové statistiky nákladů, proto se zobrazí jak historická
+spotřeba, tak její cena. Náklad za interval odpovídá změně stavu vodoměru
+vynásobené cenou nastavenou přes **Přenastavit**.
 
-`Water price` je senzor aktuální jednotkové ceny, nikoli kumulativní nákladový senzor. Pokud už máte v panelu Energie uloženou pevnou cenu, upravte zdroj a přepněte ho na `Total water cost` podle postupu výše.
+`Water price` je senzor aktuální jednotkové ceny, nikoli kumulativní nákladová
+statistika. `Total water cost` zůstává praktickým živým zobrazovacím senzorem,
+ale není zdrojem statistik Energie. Pokud už panel používá starší zdroj
+`sensor.*` (`Meter state` nebo `Total water cost`) či pevnou cenu, proveďte
+nejdříve jednorázovou obnovu níže a teprve potom přepněte obě volby.
+
+### Oprava starších statistik Energie
+
+Verze 0.4.8 opravuje dřívější dvojí zápis statistik, který mohl zkreslit denní
+a měsíční součty. Aktualizace sama žádná data nemaže. Po první úspěšné
+aktualizaci nové verze spusťte v **Nástroje pro vývojáře → Akce** následující
+službu s ID své konfigurační položky:
+
+```yaml
+action: vschrudim_watermeter.rebuild_energy_statistics
+data:
+  entry_id: "id-vasi-konfiguracni-polozky"
+  confirm: true
+```
+
+Služba nejdříve stáhne a ověří celou dostupnou historii portálu. Teprve poté
+vymaže staré statistiky `sensor.*` a integrační statistiky, chronologicky
+naimportuje náhradu, ověří poslední monotónní součet a obnoví běžné zápisy.
+Pokud stažení nebo ověření selže, stávající statistiky nesmaže. Živé stavy
+senzorů ani jejich obyčejnou historii Recorderu nikdy nemaže.
+
+`vschrudim_watermeter.clear_energy_statistics` vyžaduje stejné `entry_id` a
+`confirm: true`, ale pouze smaže uvedené statistiky Energie a ponechá zápis
+pozastavený. Použijte ji jen tehdy, když chcete řadu Energie záměrně vyprázdnit
+před pozdější obnovou.
 
 ## Historická data
 
@@ -45,6 +90,12 @@ Diagnostické entity zobrazují:
 - čas a výsledek posledního pokusu o aktualizaci (`Last update attempt`),
 - postup tříletého doplnění historie, počet importovaných hodin a poslední chybu (`History backfill status`).
 
+Stažená diagnostika navíc obsahuje nejnovější-první průběžnou historii posledních
+30 běžných pokusů o stažení. Každý záznam obsahuje pouze bezpečný čas, výsledek,
+způsob získání, počet a očištěnou chybu. Historie přežije restart Home
+Assistantu a neobsahuje přihlašovací údaje, cookies, HTML portálu, CSV obsah,
+identifikátory odběrného místa ani URL požadavků.
+
 ## Upozornění na nedostupnost a chybějící odečty
 
 Integrace používá trvalá oznámení Home Assistantu. Ve výchozím nastavení po třech po sobě jdoucích neúspěšných aktualizacích oznámí nedostupnost portálu, při dalších chybách stejné oznámení nahradí a po obnovení ho automaticky odstraní. Chyby přihlášení řeší standardním procesem opětovné autentizace.
@@ -53,7 +104,14 @@ Každé úspěšné stažení se spojí s odečty, které už byly během běhu 
 
 ## Kompatibilita s portálem
 
-VS Chrudim poskytuje autentizovaný web ASP.NET WebForms, nikoli zdokumentované veřejné API. Klient následuje pole formulářů, odkazy v menu, WebForms postbacky a odkazy pro CSV export nalezené v přihlášeném HTML. Pokud očekávanou strukturu nenajde, bezpečně skončí s chybou; nevymýšlí REST endpointy a nespouští WebDownloader.
+VS Chrudim poskytuje autentizovaný web ASP.NET WebForms, nikoli zdokumentované
+veřejné API. Klient následuje pole formulářů, odkazy v menu, WebForms postbacky
+a odkazy pro CSV export nalezené v přihlášeném HTML. U naměřených stavů podporuje
+ověřené přímé CSV odkazy, dokumentované WebForms ovladače odeslání, ověřené
+exportní LinkButtony `__doPostBack` a deterministickou záložní tabulku s českými
+záhlavími data a stavu vodoměru. Libovolný JavaScript nikdy nespouští. Pokud
+očekávanou strukturu nenajde, bezpečně skončí s chybou; nevymýšlí REST endpointy
+a nespouští WebDownloader.
 
 Pro zpětné načtení historie jsou potřeba aktuální prvky vlastního období portálu. Pokud je provozovatel změní nebo odstraní, běžné aktualizace zůstanou odděleny od chybného doplnění historie a diagnostický stav uvede chybu protokolu.
 

@@ -1,0 +1,39 @@
+clear_energy_statistics:
+  name: Clear Energy statistics
+  description: >-
+    Remove only VSChrudim-owned and known legacy Energy statistics. The live
+    sensors and their normal state history are not deleted. This operation
+    requires confirm=true and leaves statistics writing paused until rebuilt.
+  fields:
+    entry_id:
+      name: Config entry ID
+      description: The VSChrudim watermeter config entry to maintain.
+      required: true
+      selector:
+        text:
+    confirm:
+      name: Confirm
+      description: Must be set to true because this deletes long-term statistics.
+      required: true
+      selector:
+        boolean:
+
+rebuild_energy_statistics:
+  name: Rebuild Energy statistics
+  description: >-
+    Fetch and validate all available portal readings before replacing only
+    VSChrudim-owned and known legacy Energy statistics. The live sensors and
+    their normal state history are not deleted.
+  fields:
+    entry_id:
+      name: Config entry ID
+      description: The VSChrudim watermeter config entry to rebuild.
+      required: true
+      selector:
+        text:
+    confirm:
+      name: Confirm
+      description: Must be set to true because this replaces long-term statistics.
+      required: true
+      selector:
+        boolean:

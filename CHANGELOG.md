@@ -1,11 +1,20 @@
 # Changelog
 
-## Unreleased
+## 0.4.8 - 2026-09-07
 
-- Document the required Energy dashboard configuration for historical water
-  costs and distinguish the unit-price sensor from the cumulative-cost entity.
-- Add a complete Czech README with the same installation, configuration,
-  history, diagnostic and security information.
+- Support verified ASP.NET WebForms `__doPostBack` export LinkButtons while
+  preserving the complete successful form payload.
+- Improve the rendered measured-state table fallback for nested and wrapped
+  ASP.NET markup when no usable export action is available.
+- Treat a valid portal response with an unchanged newest reading as a
+  successful update; source-data age remains diagnostic information only.
+- Persist a bounded, privacy-safe history of recent download attempts in
+  diagnostics, including retrieval method, duration and sanitized errors.
+- Move Energy water consumption and cost to the integration-owned external
+  statistics writer, preventing duplicate `sensor.*` sums from distorting day
+  and month totals.
+- Add explicitly confirmed services to clear or preflight-validate and rebuild
+  only VSChrudim Energy statistics.
 
 ## 0.4.7 - 2026-09-07
 

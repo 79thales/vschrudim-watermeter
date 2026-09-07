@@ -55,6 +55,22 @@ class ApiParserTests(unittest.TestCase):
             [(0, 10.0), (1, 10.125)],
         )
 
+    def test_parse_readings_html_nested_webforms_table(self):
+        readings = api.parse_readings_html(
+            """
+            <table class="layout"><tr><td>
+              <div><table id="states"><tbody>
+                <tr><th><span>Měřidlo</span></th><th><span>Datum a čas</span></th>
+                    <th><span>Stav vodoměru</span></th><th>Další údaj</th></tr>
+                <tr><td><span>A</span></td><td><span>01.01.2026&nbsp;00:00</span></td>
+                    <td><strong>10,250 m³</strong></td><td>ignored</td></tr>
+              </tbody></table></div>
+            </td></tr></table>
+            """
+        )
+
+        self.assertEqual([(item.timestamp.hour, item.meter_state_m3) for item in readings], [(0, 10.25)])
+
     def test_parse_consumption_places(self):
         html = '<table id="x_gvConsumptionPlaces"><tr><th>x</th></tr><tr><td>123</td><td>456</td><td>Example 1</td><td>C-1</td><td>v1</td></tr></table>'
         place = api.parse_consumption_places(html)[0]
@@ -268,6 +284,55 @@ class MeasuredStatesNavigationTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(calls[0][2]["downloadData"], "export")
+
+    async def test_replays_verified_webforms_export_postback(self):
+        client = api.VsChrudimClient(object(), "user", "password")
+        calls = []
+
+        async def request(method, url, data=None):
+            calls.append((method, url, data))
+            return ("MERIDLO;CAS;STAV\nA;01.01.2026 00:00;10,000\n", url)
+
+        client._request_text = request
+        content, metadata = await client._download_csv_with_metadata(
+            """
+            <form method="post" action="./ProfileData.aspx">
+              <input type="hidden" name="__VIEWSTATE" value="state">
+              <input type="text" name="filterFrom" value="01.09.2026">
+              <select name="period"><option value="U" selected>Custom</option></select>
+              <a href="javascript:__doPostBack('ctl00$GraphFilter1$btnExport','')">Export CSV</a>
+            </form>
+            """,
+            "https://zakaznik.vschrudim.cz/Userdata/ProfileData.aspx",
+        )
+
+        self.assertIn("MERIDLO;CAS;STAV", content)
+        self.assertEqual(metadata.source, "csv_postback")
+        self.assertEqual(calls[0][0], "POST")
+        self.assertEqual(calls[0][1], "https://zakaznik.vschrudim.cz/Userdata/ProfileData.aspx")
+        self.assertEqual(
+            calls[0][2],
+            {
+                "__VIEWSTATE": "state",
+                "filterFrom": "01.09.2026",
+                "period": "U",
+                "__EVENTTARGET": "ctl00$GraphFilter1$btnExport",
+                "__EVENTARGUMENT": "",
+            },
+        )
+
+    async def test_does_not_execute_unrecognized_javascript_export_link(self):
+        client = api.VsChrudimClient(object(), "user", "password")
+
+        async def request(*args, **kwargs):
+            self.fail("Unrecognized JavaScript must not be requested")
+
+        client._request_text = request
+        with self.assertRaisesRegex(api.VsChrudimProtocolError, "no recognizable"):
+            await client._download_csv(
+                '<a href="javascript:window.evil()">Export CSV</a>',
+                "https://zakaznik.vschrudim.cz/Userdata/ProfileData.aspx",
+            )
 
     async def test_uses_verified_readings_url_and_requires_filter(self):
         client = api.VsChrudimClient(object(), "user", "password")

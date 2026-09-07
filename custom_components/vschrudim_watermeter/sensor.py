@@ -46,7 +46,10 @@ class WaterMeterStateSensor(_BaseSensor):
     _attr_translation_key = "meter_state"
     _attr_device_class = SensorDeviceClass.WATER
     _attr_native_unit_of_measurement = UnitOfVolume.CUBIC_METERS
-    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    # This is a live display value, not the owner of Energy statistics.
+    # Recorder must not generate a competing sensor.* sum series; the
+    # coordinator writes the single integration-owned external statistic.
+    _attr_state_class = None
     _attr_suggested_display_precision = 3
     def __init__(self, coordinator: VsChrudimCoordinator) -> None:
         super().__init__(coordinator)
@@ -108,9 +111,9 @@ class TotalWaterCostSensor(_BaseSensor):
     _attr_translation_key = "total_water_cost"
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_native_unit_of_measurement = "CZK"
-    # Home Assistant permits monetary device classes with TOTAL, and uses the
-    # change in this lifetime cumulative value for dashboard costs.
-    _attr_state_class = SensorStateClass.TOTAL
+    # Keep the entity available for display, but do not create another
+    # Recorder sum series alongside the integration-owned external cost ID.
+    _attr_state_class = None
     _attr_suggested_display_precision = 2
 
     def __init__(

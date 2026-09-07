@@ -9,11 +9,13 @@ from .api import VsChrudimClient
 from .const import CONF_PLACE, DOMAIN, PLATFORMS
 from .coordinator import VsChrudimCoordinator
 from .models import ConsumptionPlace
+from .services import async_setup_services
 
 type VsChrudimConfigEntry = ConfigEntry[VsChrudimCoordinator]
 
 async def async_setup_entry(hass: HomeAssistant, entry: VsChrudimConfigEntry) -> bool:
     """Set up from a config entry; session credentials stay in ConfigEntry data."""
+    await async_setup_services(hass)
     place = ConsumptionPlace(**entry.data[CONF_PLACE])
     session = async_create_clientsession(hass, cookie_jar=aiohttp.CookieJar())
     client = VsChrudimClient(

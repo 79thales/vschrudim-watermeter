@@ -14,32 +14,70 @@ For a manual installation, copy `custom_components/vschrudim_watermeter` to `/co
 
 Enter the portal username and password, then select a consumption place. The default update interval is one hour, matching the portal's hourly reading resolution; it can be changed in Reconfigure (minimum 15 minutes). An interval already saved by the user is preserved during upgrades.
 
-The portal records a cumulative state hourly. The `Meter state` sensor uses `total_increasing` in m³ and is the statistic to select in **Settings → Dashboards → Energy → Water consumption**. Completed portal hours are imported under that real sensor ID, so the Energy dashboard can use the historical readings and still allow an entity-based current price. `Latest consumption` is the non-negative difference between the newest two states; it is not an instantaneous flow rate.
+The portal records a cumulative state hourly. `Meter state` is a live display
+sensor in m³. Completed portal hours are written by the integration's single
+external-statistics writer; this prevents the live sensor and the importer from
+creating competing Recorder sums. `Latest consumption` is the non-negative
+difference between the newest two states; it is not an instantaneous flow
+rate.
 
 Set the all-in water/sewerage price in **Reconfigure**. A value of `0` is intentionally the default until you enter your actual tariff. The integration exposes both `Water price` (`CZK/m³`) and `Total water cost` (`CZK`). Changing the integration price restarts the idempotent history scan so existing hourly cost statistics are recalculated with the new tariff.
 
 ### Energy dashboard and historical costs
 
-Use the integration's cumulative cost entity when configuring water in the
-Home Assistant Energy dashboard:
+Use the integration-owned statistics when configuring water in the Home
+Assistant Energy dashboard:
 
 1. Open **Settings → Dashboards → Energy → Water** and add or edit the water
    source.
-2. Select **Meter state** as **Water consumption**.
+2. Select **Water consumption** from **VSChrudim watermeter** as **Water
+   consumption**. This is the external statistic ID
+   `vschrudim_watermeter:<entry_id>_water_consumption`, not `sensor.*`.
+   Recorder requires lowercase statistic IDs, so `<entry_id>` is normalized to
+   lowercase when Home Assistant uses an uppercase config-entry ID.
 3. Under cost tracking, choose **Use an entity tracking the total costs**.
-4. Select **Total water cost** as the total-cost entity and save.
+4. Select **Water cost** from **VSChrudim watermeter** as the total-cost
+   statistic. Its ID is `vschrudim_watermeter:<entry_id>_water_cost`.
 
 This selection is important for imported history. Home Assistant's **fixed
 price** and **current price entity** modes create a helper that starts at zero
 and calculates only future live changes. They do not retroactively price the
-hourly readings imported by this integration. `Total water cost`, on the other
-hand, contains matching hourly cost statistics, so both historical consumption
-and its cost are shown. For each interval, the displayed cost change is the
+hourly readings imported by this integration. The `Water cost` statistic
+contains matching hourly cost statistics, so both historical consumption and
+its cost are shown. For each interval, the displayed cost change is the
 meter-state change multiplied by the price configured in **Reconfigure**.
 
 `Water price` is the current unit-price sensor and is not the cumulative cost
-entity. If the Energy dashboard already shows the saved fixed-price mode, edit
-the source and switch it to `Total water cost` as described above.
+statistic. `Total water cost` remains a convenient live display entity, but is
+not an Energy statistic source. If the dashboard already uses a legacy
+`Meter state`/`Total water cost` `sensor.*` source or fixed-price mode, use the
+one-time rebuild procedure below before switching both selections.
+
+### Correcting legacy Energy statistics
+
+Version 0.4.8 fixes a former double-writer design that could distort day and
+month totals. The upgrade does not delete any data automatically. After the
+new version has completed one successful update, run this service in
+**Developer Tools → Actions** with your integration's config-entry ID:
+
+```yaml
+action: vschrudim_watermeter.rebuild_energy_statistics
+data:
+  entry_id: "your-config-entry-id"
+  confirm: true
+```
+
+The service first downloads and validates the complete available portal
+history. Only then does it clear the legacy `sensor.*` statistics and the
+integration-owned statistics, import a chronological replacement, verify its
+latest monotonic sum, and resume normal writes. If download or validation
+fails, it does not delete existing statistics. It never deletes the live
+sensor states or their ordinary Recorder history.
+
+`vschrudim_watermeter.clear_energy_statistics` has the same `entry_id` and
+`confirm: true` requirement but only clears those Energy statistics and leaves
+the writer paused. Use it only when you intentionally want the Energy series
+empty before a later rebuild.
 
 ## Historical data
 
@@ -53,6 +91,12 @@ Diagnostic entities show:
 - the time and result of the latest update attempt (`Last update attempt`),
 - three-year history progress, imported-hour count and the last backfill error (`History backfill status`).
 
+The downloaded diagnostics additionally include a newest-first rolling history
+of the last 30 normal download attempts. Each record contains only safe timing,
+result, retrieval-method, count and sanitized-error information. It survives a
+Home Assistant restart and contains no credentials, cookies, portal HTML, CSV
+content, consumption-place identifiers or request URLs.
+
 ## Availability notifications and missing readings
 
 The integration uses Home Assistant persistent notifications. By default it reports the portal as unavailable after three consecutive failed updates, replaces the same notification on further failures, and dismisses it automatically after recovery. Authentication errors use the standard reauthentication flow instead.
@@ -63,7 +107,13 @@ Every successful download is merged with readings already seen during the curren
 
 VS Chrudim supplies an authenticated ASP.NET WebForms website, not a documented public API. The client follows fields, menu links, WebForms postbacks and CSV-export links found in the authenticated HTML, and fails safely when the expected structure is absent. It does not guess REST endpoints or run WebDownloader.
 
-The portal's current custom-range controls are required for historical backfill. If the provider changes or removes them, normal polling remains isolated from the failed backfill and the diagnostic status reports the protocol error.
+The portal's current custom-range controls are required for historical backfill.
+For measured-state downloads the integration supports verified direct CSV
+links, documented WebForms submit controls, verified `__doPostBack` export
+LinkButtons, and a deterministic table fallback with Czech date and meter-state
+headings. It never runs arbitrary JavaScript. If the provider changes or
+removes all usable structures, normal polling remains isolated from the failed
+backfill and the diagnostic status reports the protocol error.
 
 ## Security
 
