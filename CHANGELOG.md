@@ -4,6 +4,8 @@
 
 - Document the required Energy dashboard configuration for historical water
   costs and distinguish the unit-price sensor from the cumulative-cost entity.
+- Add a complete Czech README with the same installation, configuration,
+  history, diagnostic and security information.
 
 ## 0.4.7 - 2026-09-07
 
