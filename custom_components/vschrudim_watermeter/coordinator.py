@@ -45,6 +45,7 @@ from .models import ConsumptionPlace, DownloadMetadata, MeterReading, WaterMeter
 from .history import (
     async_add_external_cost_statistics,
     async_add_external_meter_statistics,
+    cost_statistics,
     history_ranges_backwards,
     meter_statistics,
 )
@@ -527,38 +528,60 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
     ) -> None:
         """Confirm Recorder has the newest, monotonic external statistics."""
         local_tz = dt_util.get_time_zone(self.hass.config.time_zone)
-        expected = meter_statistics(readings, local_tz=local_tz, now=dt_util.now())
-        if not expected:
+        now = dt_util.now()
+        expected_by_id = {
+            self.consumption_statistic_id: meter_statistics(
+                readings, local_tz=local_tz, now=now
+            ),
+            self.cost_statistic_id: cost_statistics(
+                readings,
+                price_per_m3=float(
+                    self.entry.options.get(CONF_PRICE_PER_M3, DEFAULT_PRICE_PER_M3)
+                ),
+                currency="CZK",
+                local_tz=local_tz,
+                now=now,
+            ),
+        }
+        if not all(expected_by_id.values()):
             raise HomeAssistantError("No completed portal hours are available for statistics")
-        expected_start = expected[-1]["start"].timestamp()
         for _ in range(_STATISTICS_OPERATION_TIMEOUT * 5):
-            last = await get_instance(self.hass).async_add_executor_job(
-                get_last_statistics,
-                self.hass,
-                1,
-                self.consumption_statistic_id,
-                True,
-                set(),
-            )
-            records = last.get(self.consumption_statistic_id, [])
-            if records and records[0].get("start") == expected_start:
+            verified = True
+            for statistic_id, expected in expected_by_id.items():
+                last = await get_instance(self.hass).async_add_executor_job(
+                    get_last_statistics,
+                    self.hass,
+                    1,
+                    statistic_id,
+                    True,
+                    set(),
+                )
+                records = last.get(statistic_id, [])
+                if not records or records[0].get("start") != expected[-1]["start"].timestamp():
+                    verified = False
+                    break
                 all_stats = await get_instance(self.hass).async_add_executor_job(
                     statistics_during_period,
                     self.hass,
                     expected[0]["start"],
                     None,
-                    {self.consumption_statistic_id},
+                    {statistic_id},
                     "hour",
                     None,
                     {"sum"},
                 )
                 sums = [
                     float(row["sum"])
-                    for row in all_stats.get(self.consumption_statistic_id, [])
+                    for row in all_stats.get(statistic_id, [])
                     if row.get("sum") is not None
                 ]
-                if sums and all(current >= prior for prior, current in zip(sums, sums[1:])):
-                    return
+                if not sums or not all(
+                    current >= prior for prior, current in zip(sums, sums[1:])
+                ):
+                    verified = False
+                    break
+            if verified:
+                return
             await asyncio.sleep(0.2)
         raise HomeAssistantError("Recorder did not verify rebuilt Energy statistics")
 
