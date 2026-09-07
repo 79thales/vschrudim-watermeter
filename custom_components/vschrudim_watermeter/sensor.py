@@ -46,9 +46,7 @@ class WaterMeterStateSensor(_BaseSensor):
     _attr_translation_key = "meter_state"
     _attr_device_class = SensorDeviceClass.WATER
     _attr_native_unit_of_measurement = UnitOfVolume.CUBIC_METERS
-    # Home Assistant permits monetary device classes with TOTAL, and uses the
-    # change in this lifetime cumulative value for dashboard costs.
-    _attr_state_class = SensorStateClass.TOTAL
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
     _attr_suggested_display_precision = 3
     def __init__(self, coordinator: VsChrudimCoordinator) -> None:
         super().__init__(coordinator)
@@ -110,7 +108,9 @@ class TotalWaterCostSensor(_BaseSensor):
     _attr_translation_key = "total_water_cost"
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_native_unit_of_measurement = "CZK"
-    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    # Home Assistant permits monetary device classes with TOTAL, and uses the
+    # change in this lifetime cumulative value for dashboard costs.
+    _attr_state_class = SensorStateClass.TOTAL
     _attr_suggested_display_precision = 2
 
     def __init__(
