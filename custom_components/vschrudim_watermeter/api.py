@@ -6,7 +6,7 @@ portal; it does not invent undocumented endpoints or persist session cookies.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from html import unescape
 from html.parser import HTMLParser
 import re
@@ -42,6 +42,10 @@ class _FormParser(HTMLParser):
         self.input_types: dict[str, str] = {}
         self.submit_names: list[str] = []
         self.links: list[tuple[str, str]] = []
+        self.selects: dict[str, str] = {}
+        self._select_name = ""
+        self._selected_option = ""
+        self._first_option = ""
         self._href = ""
         self._text: list[str] = []
 
@@ -61,6 +65,16 @@ class _FormParser(HTMLParser):
         elif tag == "a":
             self._href = values.get("href", "") or ""
             self._text = []
+        elif tag == "select":
+            self._select_name = values.get("name", "") or ""
+            self._selected_option = ""
+            self._first_option = ""
+        elif tag == "option" and self._select_name:
+            option_value = values.get("value", "") or ""
+            if not self._first_option:
+                self._first_option = option_value
+            if "selected" in values:
+                self._selected_option = option_value
 
     def handle_data(self, data: str) -> None:
         if self._href:
@@ -71,6 +85,13 @@ class _FormParser(HTMLParser):
             self.links.append((" ".join(self._text).strip(), self._href))
             self._href = ""
             self._text = []
+        elif tag == "select" and self._select_name:
+            self.selects[self._select_name] = (
+                self._selected_option or self._first_option
+            )
+            self._select_name = ""
+            self._selected_option = ""
+            self._first_option = ""
 
 def _parse_form(html: str) -> _FormParser:
     parser = _FormParser()
@@ -131,6 +152,26 @@ def _looks_like_readings_page(html: str) -> bool:
             re.I,
         )
     )
+
+
+def _control_ending(values: dict[str, str], suffix: str) -> str:
+    """Find a WebForms control by its stable name suffix."""
+    suffix = suffix.casefold()
+    return next(
+        (name for name in values if name.casefold().endswith(suffix)),
+        "",
+    )
+
+
+def _webforms_payload(form: _FormParser) -> dict[str, str]:
+    """Build a postback payload from hidden fields and selected lists."""
+    payload = {
+        name: value
+        for name, value in form.inputs.items()
+        if form.input_types.get(name) == "hidden"
+    }
+    payload.update(form.selects)
+    return payload
 
 class _ConsumptionPlaceGridParser(HTMLParser):
     """Read the verified WebForms grid like the working WebDownloader DOM code."""
@@ -306,6 +347,40 @@ class VsChrudimClient:
         readings = tuple(parse_readings_csv(csv))
         return WaterMeterData(place, readings, latest_consumption(readings))
 
+    async def async_get_history(
+        self,
+        place: ConsumptionPlace,
+        date_from: date,
+        date_to: date,
+    ) -> tuple[MeterReading, ...]:
+        """Download a verified custom date range from the measured-states page."""
+        if date_to < date_from:
+            raise ValueError("date_to must not precede date_from")
+        await self._ensure_login()
+        html, url = await self._request_text("GET", PLACES_URL)
+        selected_html, selected_url = await self._select_place(html, url, place)
+        readings_html, readings_url = await self._open_measured_states(
+            selected_html, selected_url
+        )
+        filtered_html, filtered_url = await self._set_custom_range(
+            readings_html,
+            readings_url,
+            date_from,
+            date_to,
+        )
+        csv = await self._download_csv(filtered_html, filtered_url)
+        readings = tuple(parse_readings_csv(csv))
+        inside = tuple(
+            reading
+            for reading in readings
+            if date_from <= reading.timestamp.date() <= date_to
+        )
+        if readings and not inside:
+            raise VsChrudimProtocolError(
+                "The portal CSV did not overlap the requested custom date range"
+            )
+        return inside
+
     async def _ensure_login(self) -> None:
         if not self._logged_in:
             await self.async_login()
@@ -372,6 +447,81 @@ class VsChrudimClient:
         raise VsChrudimProtocolError(
             "The portal did not expose the verified readings filter"
         )
+
+    async def _set_custom_range(
+        self,
+        html: str,
+        url: str,
+        date_from: date,
+        date_to: date,
+    ) -> tuple[str, str]:
+        """Replay the WebDownloader custom-range WebForms sequence."""
+        form = _parse_form(html)
+        period_name = _control_ending(form.selects, "$edGraphLength")
+        if not period_name:
+            raise VsChrudimProtocolError(
+                "The portal did not expose the measured-state period selector"
+            )
+
+        period_payload = _webforms_payload(form)
+        period_payload[period_name] = "U"
+        period_payload["__EVENTTARGET"] = period_name
+        period_payload["__EVENTARGUMENT"] = ""
+        html, url = await self._request_text(
+            "POST",
+            urljoin(url, form.action or url),
+            data=period_payload,
+        )
+
+        form = _parse_form(html)
+        period_name = _control_ending(form.selects, "$edGraphLength")
+        date_from_name = _control_ending(form.inputs, "$edDateFrom")
+        date_to_name = _control_ending(form.inputs, "$edDateTo")
+        hidden_from_name = _control_ending(form.inputs, "$hfDateFrom")
+        hidden_to_name = _control_ending(form.inputs, "$hfDateTo")
+        renew_name = _control_ending(form.inputs, "$btnRenew")
+        if not all(
+            (
+                period_name,
+                date_from_name,
+                date_to_name,
+                hidden_from_name,
+                hidden_to_name,
+                renew_name,
+            )
+        ):
+            raise VsChrudimProtocolError(
+                "The portal did not expose all custom date-range controls"
+            )
+
+        formatted_from = date_from.strftime("%d.%m.%Y")
+        formatted_to = date_to.strftime("%d.%m.%Y")
+        range_payload = _webforms_payload(form)
+        range_payload.update(
+            {
+                period_name: "U",
+                date_from_name: formatted_from,
+                date_to_name: formatted_to,
+                hidden_from_name: formatted_from,
+                hidden_to_name: formatted_to,
+                renew_name: form.inputs.get(renew_name, ""),
+            }
+        )
+        range_payload["__EVENTTARGET"] = ""
+        range_payload["__EVENTARGUMENT"] = ""
+        response = await self._request_text(
+            "POST",
+            urljoin(url, form.action or url),
+            data=range_payload,
+        )
+        if self._looks_like_login(response[0]):
+            self._logged_in = False
+            raise VsChrudimAuthError("Authenticated session expired")
+        if not _looks_like_readings_page(response[0]):
+            raise VsChrudimProtocolError(
+                "The portal did not return the measured-state page for the custom range"
+            )
+        return response
 
     async def _download_csv(self, html: str, url: str) -> str:
         form = _parse_form(html)

@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.0 - 2026-09-07
+
+- Change the default polling interval to one hour while preserving explicitly
+  configured intervals.
+- Import completed cumulative readings under the real `Meter state` entity
+  statistic so it is immediately selectable as water consumption in Energy.
+- Preserve entity-based `CZK/m³` price support in the Energy water settings.
+- Add an automatic, resumable three-year history scan in verified 31-day HTTP
+  ranges while retaining every portal record as a separate hourly statistic.
+- Persist only backfill progress and counters; readings remain in Recorder.
+- Add diagnostic sensors for newest available data, latest update attempt and
+  history-backfill progress/errors.
+- Notify when a history scan exhausts its retries and dismiss the notification
+  after a successful resumed scan.
+- Remove consumption-place identifiers and readings from shared diagnostics.
+- Add WebForms custom-range and internal-statistics regression coverage.
+- Document the current upstream HACS custom-repository icon limitation while
+  continuing to ship both inline brand icon resolutions.
+
 ## 0.3.4 - 2026-09-07
 
 - Open measured states through the portal's verified

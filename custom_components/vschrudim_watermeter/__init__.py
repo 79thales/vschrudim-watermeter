@@ -22,9 +22,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: VsChrudimConfigEntry) ->
         entry.data[CONF_PASSWORD],
     )
     coordinator = VsChrudimCoordinator(hass, entry, client, place)
+    await coordinator.async_initialize()
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    coordinator.async_start_history_backfill(
+        resume_only=coordinator.history_backfill_status != "not_started"
+    )
     return True
 
 async def async_unload_entry(hass: HomeAssistant, entry: VsChrudimConfigEntry) -> bool:

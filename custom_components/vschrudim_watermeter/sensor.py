@@ -2,17 +2,27 @@
 from __future__ import annotations
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfVolume
+from homeassistant.const import EntityCategory, UnitOfVolume
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 from .const import DOMAIN
 from .const import CONF_PRICE_PER_M3, DEFAULT_PRICE_PER_M3
 from .coordinator import VsChrudimCoordinator
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry[VsChrudimCoordinator], async_add_entities: AddEntitiesCallback) -> None:
-    async_add_entities([WaterMeterStateSensor(entry.runtime_data), LatestConsumptionSensor(entry.runtime_data), WaterPriceSensor(entry.runtime_data, entry)])
+    async_add_entities(
+        [
+            WaterMeterStateSensor(entry.runtime_data),
+            LatestConsumptionSensor(entry.runtime_data),
+            WaterPriceSensor(entry.runtime_data, entry),
+            DataAvailableThroughSensor(entry.runtime_data),
+            LastUpdateAttemptSensor(entry.runtime_data),
+            HistoryBackfillStatusSensor(entry.runtime_data),
+        ]
+    )
 
 class _BaseSensor(CoordinatorEntity[VsChrudimCoordinator], SensorEntity):
     _attr_has_entity_name = True
@@ -26,9 +36,13 @@ class WaterMeterStateSensor(_BaseSensor):
     _attr_device_class = SensorDeviceClass.WATER
     _attr_native_unit_of_measurement = UnitOfVolume.CUBIC_METERS
     _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_suggested_display_precision = 3
     def __init__(self, coordinator: VsChrudimCoordinator) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{coordinator.place.identifier}_meter_state"
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self.coordinator.async_register_meter_entity(self.entity_id)
     @property
     def native_value(self) -> float | None:
         return self.coordinator.data.readings[-1].meter_state_m3 if self.coordinator.data.readings else None
@@ -48,6 +62,7 @@ class LatestConsumptionSensor(_BaseSensor):
     _attr_translation_key = "latest_consumption"
     _attr_native_unit_of_measurement = UnitOfVolume.CUBIC_METERS
     _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 3
     def __init__(self, coordinator: VsChrudimCoordinator) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{coordinator.place.identifier}_latest_consumption"
@@ -67,3 +82,87 @@ class WaterPriceSensor(_BaseSensor):
     @property
     def native_value(self) -> float:
         return float(self._entry.options.get(CONF_PRICE_PER_M3, DEFAULT_PRICE_PER_M3))
+
+
+class DataAvailableThroughSensor(_BaseSensor):
+    """Newest portal timestamp contained in the successful download."""
+
+    _attr_translation_key = "data_available_through"
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator: VsChrudimCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.place.identifier}_data_available_through"
+
+    @property
+    def native_value(self):
+        if not self.coordinator.data.readings:
+            return None
+        local_tz = dt_util.get_time_zone(self.coordinator.hass.config.time_zone)
+        return self.coordinator.data.readings[-1].timestamp.replace(tzinfo=local_tz)
+
+
+class LastUpdateAttemptSensor(_BaseSensor):
+    """Timestamp and outcome of the most recent coordinator attempt."""
+
+    _attr_translation_key = "last_update_attempt"
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator: VsChrudimCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.place.identifier}_last_update_attempt"
+
+    @property
+    def native_value(self):
+        return self.coordinator.last_attempt_at
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object]:
+        return {
+            "result": self.coordinator.last_attempt_result,
+            "last_success": self.coordinator.last_success_at.isoformat()
+            if self.coordinator.last_success_at
+            else None,
+            "last_error": self.coordinator.last_attempt_error,
+        }
+
+
+class HistoryBackfillStatusSensor(_BaseSensor):
+    """Resumable three-year backfill progress without customer identifiers."""
+
+    _attr_translation_key = "history_backfill_status"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator: VsChrudimCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.place.identifier}_history_backfill_status"
+
+    @property
+    def native_value(self) -> str:
+        return self.coordinator.history_backfill_status
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object]:
+        return {
+            "processed_chunks": self.coordinator.history_backfill_processed_chunks,
+            "total_chunks": self.coordinator.history_backfill_total_chunks,
+            "imported_hours": self.coordinator.history_backfill_imported_hours,
+            "scan_start": self.coordinator.history_backfill_scan_start.isoformat()
+            if self.coordinator.history_backfill_scan_start
+            else None,
+            "next_range_end": self.coordinator.history_backfill_cursor.isoformat()
+            if self.coordinator.history_backfill_cursor
+            else None,
+            "earliest_data": self.coordinator.history_earliest_date.isoformat()
+            if self.coordinator.history_earliest_date
+            else None,
+            "started_at": self.coordinator.history_backfill_started_at.isoformat()
+            if self.coordinator.history_backfill_started_at
+            else None,
+            "completed_at": self.coordinator.history_backfill_completed_at.isoformat()
+            if self.coordinator.history_backfill_completed_at
+            else None,
+            "last_error": self.coordinator.history_backfill_error,
+        }

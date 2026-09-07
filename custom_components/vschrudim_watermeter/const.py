@@ -19,7 +19,7 @@ DEFAULT_NOTIFY_MISSING = True
 DEFAULT_FAILURE_THRESHOLD = 3
 DEFAULT_MISSING_RETRY_ATTEMPTS = 2
 DEFAULT_RETRY_DELAY = 30
-DEFAULT_SCAN_INTERVAL = timedelta(hours=4)
+DEFAULT_SCAN_INTERVAL = timedelta(hours=1)
 MIN_SCAN_INTERVAL = timedelta(minutes=15)
 BASE_URL = "https://zakaznik.vschrudim.cz/"
 PLACES_URL = "https://zakaznik.vschrudim.cz/ConsumptionPlaceList.aspx"

@@ -23,6 +23,7 @@ from .const import (
     DEFAULT_NOTIFY_UNAVAILABLE,
     DEFAULT_PRICE_PER_M3,
     DEFAULT_RETRY_DELAY,
+    DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     MIN_SCAN_INTERVAL,
 )
@@ -101,7 +102,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="reconfigure",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_SCAN_INTERVAL, default=entry.options.get(CONF_SCAN_INTERVAL, 240)): vol.All(vol.Coerce(int), vol.Range(min=int(MIN_SCAN_INTERVAL.total_seconds() / 60), max=1440)),
+                    vol.Required(CONF_SCAN_INTERVAL, default=entry.options.get(CONF_SCAN_INTERVAL, int(DEFAULT_SCAN_INTERVAL.total_seconds() / 60))): vol.All(vol.Coerce(int), vol.Range(min=int(MIN_SCAN_INTERVAL.total_seconds() / 60), max=1440)),
                     vol.Required(CONF_PRICE_PER_M3, default=entry.options.get(CONF_PRICE_PER_M3, DEFAULT_PRICE_PER_M3)): vol.All(vol.Coerce(float), vol.Range(min=0, max=1000)),
                     vol.Required(CONF_NOTIFY_UNAVAILABLE, default=entry.options.get(CONF_NOTIFY_UNAVAILABLE, DEFAULT_NOTIFY_UNAVAILABLE)): bool,
                     vol.Required(CONF_FAILURE_THRESHOLD, default=entry.options.get(CONF_FAILURE_THRESHOLD, DEFAULT_FAILURE_THRESHOLD)): vol.All(vol.Coerce(int), vol.Range(min=1, max=20)),

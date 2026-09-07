@@ -3,11 +3,11 @@
   "name": "VSChrudim watermeter",
   "codeowners": ["@79thales"],
   "config_flow": true,
-  "dependencies": ["persistent_notification"],
+  "dependencies": ["persistent_notification", "recorder"],
   "documentation": "https://github.com/79thales/vschrudim-watermeter",
   "integration_type": "service",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/79thales/vschrudim-watermeter/issues",
   "requirements": [],
-  "version": "0.3.4"
+  "version": "0.4.0"
 }

@@ -1,5 +1,6 @@
 """Tests with anonymized, static portal export examples."""
 import importlib.util
+from datetime import date
 from pathlib import Path
 import sys
 import types
@@ -120,3 +121,41 @@ class MeasuredStatesNavigationTests(unittest.IsolatedAsyncioTestCase):
             "ctl00$ctl00$MainMenu1$btnProfileData",
         )
         self.assertEqual(calls[-1][2]["__EVENTARGUMENT"], "")
+
+    async def test_custom_history_replays_period_then_date_range(self):
+        client = api.VsChrudimClient(object(), "user", "password")
+        calls = []
+        form_html = """
+        <form method="post" action="./ProfileData.aspx">
+          <input type="hidden" name="__VIEWSTATE" value="state">
+          <input type="text" name="ctl00$GraphFilter1$edDateFrom" value="">
+          <input type="text" name="ctl00$GraphFilter1$edDateTo" value="">
+          <input type="hidden" name="ctl00$GraphFilter1$hfDateFrom" value="">
+          <input type="hidden" name="ctl00$GraphFilter1$hfDateTo" value="">
+          <input type="submit" name="ctl00$GraphFilter1$btnRenew" value="Update">
+          <select name="ctl00$GraphFilter1$edGraphLength">
+            <option value="W">Week</option><option value="U">Custom</option>
+          </select>
+        </form>
+        """
+        custom_html = form_html.replace(
+            '<option value="U">', '<option value="U" selected>'
+        )
+
+        async def request(method, url, data=None):
+            calls.append((method, url, data))
+            return (custom_html, url)
+
+        client._request_text = request
+        await client._set_custom_range(
+            form_html,
+            "https://zakaznik.vschrudim.cz/Userdata/ProfileData.aspx",
+            date(2026, 1, 2),
+            date(2026, 2, 3),
+        )
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[0][2]["__EVENTTARGET"], "ctl00$GraphFilter1$edGraphLength")
+        self.assertEqual(calls[0][2]["ctl00$GraphFilter1$edGraphLength"], "U")
+        self.assertEqual(calls[1][2]["ctl00$GraphFilter1$edDateFrom"], "02.01.2026")
+        self.assertEqual(calls[1][2]["ctl00$GraphFilter1$hfDateTo"], "03.02.2026")
+        self.assertEqual(calls[1][2]["ctl00$GraphFilter1$btnRenew"], "Update")

@@ -18,6 +18,7 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
             "custom_components.vschrudim_watermeter.config_flow",
             "custom_components.vschrudim_watermeter.coordinator",
             "custom_components.vschrudim_watermeter.diagnostics",
+            "custom_components.vschrudim_watermeter.history",
             "custom_components.vschrudim_watermeter.models",
             "custom_components.vschrudim_watermeter.recovery",
             "custom_components.vschrudim_watermeter.sensor",
@@ -34,3 +35,20 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
         self.assertEqual(sensor.device_class, SensorDeviceClass.WATER)
         self.assertEqual(sensor.state_class, SensorStateClass.TOTAL_INCREASING)
         self.assertEqual(sensor.native_unit_of_measurement, UnitOfVolume.CUBIC_METERS)
+
+    def test_history_is_imported_under_real_meter_entity(self):
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        from custom_components.vschrudim_watermeter.history import meter_statistics
+        from custom_components.vschrudim_watermeter.models import MeterReading
+
+        rows = meter_statistics(
+            (
+                MeterReading(datetime(2026, 1, 1, 10), 100.0),
+                MeterReading(datetime(2026, 1, 1, 11), 100.125),
+            ),
+            local_tz=ZoneInfo("Europe/Prague"),
+            now=datetime(2026, 1, 1, 13, tzinfo=ZoneInfo("Europe/Prague")),
+        )
+        self.assertEqual([row["sum"] for row in rows], [100.0, 100.125])
+        self.assertTrue(all(row["start"].tzinfo is not None for row in rows))
