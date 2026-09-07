@@ -154,14 +154,14 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
             finished_at="2026-01-01T11:00:01+01:00",
             duration_ms=100,
             result="failed",
-            error="password=secret",
+            error="password=credential-token-73921",
         )
         coordinator = SimpleNamespace(
             data=None,
             last_attempt_at=None,
             last_success_at=None,
             last_attempt_result="failed",
-            last_attempt_error="password=secret",
+            last_attempt_error="password=credential-token-73921",
             download_attempt_history=[older, newer],
             consumption_statistic_id="vschrudim_watermeter:example_water_consumption",
             cost_statistic_id="vschrudim_watermeter:example_water_cost",
@@ -177,11 +177,15 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
         )
         entry = SimpleNamespace(
             runtime_data=coordinator,
-            data={"username": "user", "password": "secret", "place": "private"},
+            data={
+                "username": "user",
+                "password": "credential-token-73921",
+                "place": "private",
+            },
             options={},
         )
         diagnostics = asyncio.run(async_get_config_entry_diagnostics(None, entry))
         history = diagnostics["download_attempt_history"]
         self.assertEqual(history[0]["result"], "failed")
-        self.assertNotIn("secret", str(diagnostics))
+        self.assertNotIn("credential-token-73921", str(diagnostics))
         self.assertNotIn("private", str(diagnostics))
