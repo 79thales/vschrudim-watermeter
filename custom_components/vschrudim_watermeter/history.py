@@ -16,6 +16,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_conversion import VolumeConverter
 
+from .calculation import total_cost
 from .models import MeterReading
 
 
@@ -66,6 +67,21 @@ def meter_statistics(
     return [result[start] for start in sorted(result)]
 
 
+def cost_statistics(
+    readings: Iterable[MeterReading],
+    *,
+    price_per_m3: float,
+    local_tz: tzinfo,
+    now: datetime,
+) -> list[StatisticData]:
+    """Convert completed readings to idempotent cumulative cost statistics."""
+    result: list[StatisticData] = []
+    for row in meter_statistics(readings, local_tz=local_tz, now=now):
+        cost = total_cost(row["state"], price_per_m3)
+        result.append(StatisticData(start=row["start"], state=cost, sum=cost))
+    return result
+
+
 @callback
 def async_import_meter_history(
     hass: HomeAssistant,
@@ -87,6 +103,39 @@ def async_import_meter_history(
         statistic_id=entity_id,
         unit_class=VolumeConverter.UNIT_CLASS,
         unit_of_measurement=UnitOfVolume.CUBIC_METERS,
+    )
+    async_import_statistics(hass, metadata, statistics)
+    return len(statistics)
+
+
+@callback
+def async_import_cost_history(
+    hass: HomeAssistant,
+    *,
+    entity_id: str,
+    readings: Iterable[MeterReading],
+    price_per_m3: float,
+    currency: str,
+    local_tz: tzinfo,
+    now: datetime,
+) -> int:
+    """Queue matching cumulative costs under the total-cost sensor ID."""
+    statistics = cost_statistics(
+        readings,
+        price_per_m3=price_per_m3,
+        local_tz=local_tz,
+        now=now,
+    )
+    if not statistics:
+        return 0
+    metadata = StatisticMetaData(
+        mean_type=StatisticMeanType.NONE,
+        has_sum=True,
+        name=None,
+        source=RECORDER_DOMAIN,
+        statistic_id=entity_id,
+        unit_class=None,
+        unit_of_measurement=currency,
     )
     async_import_statistics(hass, metadata, statistics)
     return len(statistics)

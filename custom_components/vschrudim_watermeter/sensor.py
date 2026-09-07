@@ -8,8 +8,8 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
-from .const import DOMAIN
-from .const import CONF_PRICE_PER_M3, DEFAULT_PRICE_PER_M3
+from .calculation import total_cost
+from .const import CONF_PRICE_PER_M3, DEFAULT_PRICE_PER_M3, DOMAIN
 from .coordinator import VsChrudimCoordinator
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry[VsChrudimCoordinator], async_add_entities: AddEntitiesCallback) -> None:
@@ -18,6 +18,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry[VsChrudimCoo
             WaterMeterStateSensor(entry.runtime_data),
             LatestConsumptionSensor(entry.runtime_data),
             WaterPriceSensor(entry.runtime_data, entry),
+            TotalWaterCostSensor(entry.runtime_data, entry),
             DataAvailableThroughSensor(entry.runtime_data),
             LastUpdateAttemptSensor(entry.runtime_data),
             HistoryBackfillStatusSensor(entry.runtime_data),
@@ -29,13 +30,25 @@ class _BaseSensor(CoordinatorEntity[VsChrudimCoordinator], SensorEntity):
     def __init__(self, coordinator: VsChrudimCoordinator) -> None:
         super().__init__(coordinator)
         identifier = coordinator.place.identifier
-        self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, identifier)}, name=coordinator.place.address or f"VS Chrudim {identifier}", manufacturer="Vodárenská společnost Chrudim", model="Smart water meter")
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, identifier)},
+            name=coordinator.place.address or f"VS Chrudim {identifier}",
+            manufacturer="Vodárenská společnost Chrudim",
+            model="Smart water meter",
+        )
+
+    @property
+    def available(self) -> bool:
+        """Keep the last successful reading available during transient failures."""
+        return self.coordinator.data is not None
 
 class WaterMeterStateSensor(_BaseSensor):
     _attr_translation_key = "meter_state"
     _attr_device_class = SensorDeviceClass.WATER
     _attr_native_unit_of_measurement = UnitOfVolume.CUBIC_METERS
-    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    # Home Assistant permits monetary device classes with TOTAL, and uses the
+    # change in this lifetime cumulative value for dashboard costs.
+    _attr_state_class = SensorStateClass.TOTAL
     _attr_suggested_display_precision = 3
     def __init__(self, coordinator: VsChrudimCoordinator) -> None:
         super().__init__(coordinator)
@@ -45,17 +58,19 @@ class WaterMeterStateSensor(_BaseSensor):
         self.coordinator.async_register_meter_entity(self.entity_id)
     @property
     def native_value(self) -> float | None:
-        return self.coordinator.data.readings[-1].meter_state_m3 if self.coordinator.data.readings else None
+        data = self.coordinator.data
+        return data.readings[-1].meter_state_m3 if data and data.readings else None
     @property
-    def extra_state_attributes(self) -> dict[str, str] | None:
-        if not self.coordinator.data.readings:
+    def extra_state_attributes(self) -> dict[str, object] | None:
+        data = self.coordinator.data
+        if not data or not data.readings:
             return None
-        latest = self.coordinator.data.readings[-1]
+        latest = data.readings[-1]
         return {
             "last_reading": latest.timestamp.isoformat(),
             "meter": latest.meter,
-            "missing_hourly_readings": len(self.coordinator.data.missing_timestamps),
-            "recovery_attempts": self.coordinator.data.recovery_attempts,
+            "missing_hourly_readings": len(data.missing_timestamps),
+            "recovery_attempts": data.recovery_attempts,
         }
 
 class LatestConsumptionSensor(_BaseSensor):
@@ -68,7 +83,8 @@ class LatestConsumptionSensor(_BaseSensor):
         self._attr_unique_id = f"{coordinator.place.identifier}_latest_consumption"
     @property
     def native_value(self) -> float | None:
-        return self.coordinator.data.latest_consumption_m3
+        data = self.coordinator.data
+        return data.latest_consumption_m3 if data else None
 
 class WaterPriceSensor(_BaseSensor):
     """Configured all-in water price suitable for Energy dashboard cost tracking."""
@@ -82,6 +98,43 @@ class WaterPriceSensor(_BaseSensor):
     @property
     def native_value(self) -> float:
         return float(self._entry.options.get(CONF_PRICE_PER_M3, DEFAULT_PRICE_PER_M3))
+    @property
+    def available(self) -> bool:
+        """The configured local price does not depend on portal availability."""
+        return True
+
+
+class TotalWaterCostSensor(_BaseSensor):
+    """Cumulative cost whose hourly history is imported with meter history."""
+
+    _attr_translation_key = "total_water_cost"
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_native_unit_of_measurement = "CZK"
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_suggested_display_precision = 2
+
+    def __init__(
+        self,
+        coordinator: VsChrudimCoordinator,
+        entry: ConfigEntry,
+    ) -> None:
+        super().__init__(coordinator)
+        self._entry = entry
+        self._attr_unique_id = f"{coordinator.place.identifier}_total_water_cost"
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self.coordinator.async_register_cost_entity(self.entity_id)
+
+    @property
+    def native_value(self) -> float | None:
+        data = self.coordinator.data
+        if not data or not data.readings:
+            return None
+        price = float(
+            self._entry.options.get(CONF_PRICE_PER_M3, DEFAULT_PRICE_PER_M3)
+        )
+        return total_cost(data.readings[-1].meter_state_m3, price)
 
 
 class DataAvailableThroughSensor(_BaseSensor):
@@ -97,10 +150,15 @@ class DataAvailableThroughSensor(_BaseSensor):
 
     @property
     def native_value(self):
-        if not self.coordinator.data.readings:
+        data = self.coordinator.data
+        if not data or not data.readings:
             return None
         local_tz = dt_util.get_time_zone(self.coordinator.hass.config.time_zone)
-        return self.coordinator.data.readings[-1].timestamp.replace(tzinfo=local_tz)
+        return data.readings[-1].timestamp.replace(tzinfo=local_tz)
+
+    @property
+    def available(self) -> bool:
+        return True
 
 
 class LastUpdateAttemptSensor(_BaseSensor):
@@ -117,6 +175,10 @@ class LastUpdateAttemptSensor(_BaseSensor):
     @property
     def native_value(self):
         return self.coordinator.last_attempt_at
+
+    @property
+    def available(self) -> bool:
+        return True
 
     @property
     def extra_state_attributes(self) -> dict[str, object]:
@@ -142,6 +204,10 @@ class HistoryBackfillStatusSensor(_BaseSensor):
     @property
     def native_value(self) -> str:
         return self.coordinator.history_backfill_status
+
+    @property
+    def available(self) -> bool:
+        return True
 
     @property
     def extra_state_attributes(self) -> dict[str, object]:

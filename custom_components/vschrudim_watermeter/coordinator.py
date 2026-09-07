@@ -28,7 +28,11 @@ from .const import (
     DOMAIN,
 )
 from .models import ConsumptionPlace, WaterMeterData
-from .history import async_import_meter_history, history_ranges_backwards
+from .history import (
+    async_import_cost_history,
+    async_import_meter_history,
+    history_ranges_backwards,
+)
 from .recovery import find_missing_hours, merge_readings
 
 _LOGGER = logging.getLogger(__name__)
@@ -68,6 +72,7 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
         self._known_readings = ()
         self._api_lock = asyncio.Lock()
         self._meter_entity_id: str | None = None
+        self._cost_entity_id: str | None = None
         self.last_attempt_at: datetime | None = None
         self.last_success_at: datetime | None = None
         self.last_attempt_result = "never"
@@ -95,6 +100,21 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
         if not isinstance(stored, dict):
             return
         status = str(stored.get("status") or "not_started")
+        configured_price = float(
+            self.entry.options.get(CONF_PRICE_PER_M3, DEFAULT_PRICE_PER_M3)
+        )
+        stored_price = stored.get("price_per_m3")
+        try:
+            price_changed = (
+                stored_price is None or float(stored_price) != configured_price
+            )
+        except (TypeError, ValueError):
+            price_changed = True
+        if price_changed:
+            # A new/changed tariff needs a complete idempotent pass so every
+            # imported meter hour receives its matching cost statistic.
+            status = "not_started"
+            stored = {}
         if status in {"not_started", "running", "paused", "failed", "completed"}:
             self.history_backfill_status = status
         self.history_backfill_started_at = _stored_datetime(stored.get("started_at"))
@@ -193,18 +213,40 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
         self._meter_entity_id = entity_id
         self._async_import_readings(self._known_readings)
 
+    def async_register_cost_entity(self, entity_id: str) -> None:
+        """Register the cumulative cost statistic used by the Energy dashboard."""
+        self._cost_entity_id = entity_id
+        self._async_import_readings(self._known_readings)
+
     def _async_import_readings(self, readings: tuple) -> int:
         """Queue completed hours under the Energy-selectable sensor ID."""
         if not self._meter_entity_id or not readings:
             return 0
         try:
-            return async_import_meter_history(
+            local_tz = dt_util.get_time_zone(self.hass.config.time_zone)
+            now = dt_util.now()
+            imported = async_import_meter_history(
                 self.hass,
                 entity_id=self._meter_entity_id,
                 readings=readings,
-                local_tz=dt_util.get_time_zone(self.hass.config.time_zone),
-                now=dt_util.now(),
+                local_tz=local_tz,
+                now=now,
             )
+            if self._cost_entity_id:
+                async_import_cost_history(
+                    self.hass,
+                    entity_id=self._cost_entity_id,
+                    readings=readings,
+                    price_per_m3=float(
+                        self.entry.options.get(
+                            CONF_PRICE_PER_M3, DEFAULT_PRICE_PER_M3
+                        )
+                    ),
+                    currency="CZK",
+                    local_tz=local_tz,
+                    now=now,
+                )
+            return imported
         except HomeAssistantError as err:
             _LOGGER.warning("Could not import water-meter history: %s", err)
             return 0
@@ -363,5 +405,8 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
                 "total_chunks": self.history_backfill_total_chunks,
                 "imported_hours": self.history_backfill_imported_hours,
                 "error": self.history_backfill_error,
+                "price_per_m3": float(
+                    self.entry.options.get(CONF_PRICE_PER_M3, DEFAULT_PRICE_PER_M3)
+                ),
             }
         )

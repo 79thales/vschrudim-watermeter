@@ -321,6 +321,63 @@ class _ConsumptionPlaceGridParser(HTMLParser):
         if tag == "table":
             self._table_depth -= 1
 
+
+class _ReadingsTableParser(HTMLParser):
+    """Extract HTML tables using the same fallback principle as WebDownloader."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.tables: list[list[list[str]]] = []
+        self._table_depth = 0
+        self._rows: list[list[str]] = []
+        self._row_depth = 0
+        self._cells: list[str] = []
+        self._cell_depth = 0
+        self._cell_text: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "table":
+            if self._table_depth == 0:
+                self._rows = []
+            self._table_depth += 1
+            return
+        if self._table_depth != 1:
+            return
+        if tag == "tr":
+            self._row_depth += 1
+            if self._row_depth == 1:
+                self._cells = []
+            return
+        if self._row_depth == 1 and tag in {"th", "td"}:
+            self._cell_depth += 1
+            if self._cell_depth == 1:
+                self._cell_text = []
+        elif self._cell_depth and tag == "br":
+            self._cell_text.append(" ")
+
+    def handle_data(self, data: str) -> None:
+        if self._table_depth == 1 and self._row_depth == 1 and self._cell_depth:
+            self._cell_text.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if not self._table_depth:
+            return
+        if self._table_depth == 1 and tag in {"th", "td"} and self._cell_depth:
+            self._cell_depth -= 1
+            if self._cell_depth == 0:
+                self._cells.append(_clean_text("".join(self._cell_text)))
+            return
+        if self._table_depth == 1 and tag == "tr" and self._row_depth:
+            self._row_depth -= 1
+            if self._row_depth == 0 and self._cells:
+                self._rows.append(self._cells)
+            return
+        if tag == "table":
+            self._table_depth -= 1
+            if self._table_depth == 0 and self._rows:
+                self.tables.append(self._rows)
+
+
 def _parse_consumption_place_grid(
     html: str,
 ) -> _ConsumptionPlaceGridParser:
@@ -387,12 +444,94 @@ def parse_readings_csv(content: str) -> list[MeterReading]:
         readings[timestamp] = MeterReading(timestamp, state, meter)
     return sorted(readings.values(), key=lambda item: item.timestamp)
 
+
+def _parse_table_datetime(value: str) -> datetime | None:
+    cleaned = _clean_text(value)
+    for fmt in _DATE_FORMATS:
+        try:
+            return datetime.strptime(cleaned, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _parse_table_number(value: str) -> float | None:
+    cleaned = _clean_text(value).replace(" ", "")
+    match = re.search(r"-?\d+(?:[.,]\d+)?", cleaned)
+    return _number(match.group(0)) if match else None
+
+
+def parse_readings_html(content: str) -> list[MeterReading]:
+    """Parse the measured-state HTML table when no export control is rendered."""
+    parser = _ReadingsTableParser()
+    parser.feed(content)
+    best_headers: list[str] = []
+    best_rows: list[list[str]] = []
+    for table in parser.tables:
+        if not table:
+            continue
+        dated_rows = [row for row in table[1:] if any(_parse_table_datetime(cell) for cell in row)]
+        if len(dated_rows) > len(best_rows):
+            best_headers = table[0]
+            best_rows = dated_rows
+    if not best_rows:
+        return []
+
+    headers = [_csv_header_key(value) for value in best_headers]
+    date_index = next(
+        (index for index, value in enumerate(headers) if "cas" in value or "datum" in value),
+        None,
+    )
+    state_index = next(
+        (index for index, value in enumerate(headers) if "stav" in value or "odecet" in value),
+        None,
+    )
+    meter_index = next(
+        (index for index, value in enumerate(headers) if "meridlo" in value),
+        None,
+    )
+    readings: dict[datetime, MeterReading] = {}
+    for row in best_rows:
+        if date_index is not None and date_index < len(row):
+            timestamp = _parse_table_datetime(row[date_index])
+        else:
+            timestamp = next(
+                (
+                    parsed
+                    for cell in row
+                    if (parsed := _parse_table_datetime(cell)) is not None
+                ),
+                None,
+            )
+        if timestamp is None:
+            continue
+        state = (
+            _parse_table_number(row[state_index])
+            if state_index is not None and state_index < len(row)
+            else next(
+                (
+                    value
+                    for cell in row
+                    if _parse_table_datetime(cell) is None
+                    and (value := _parse_table_number(cell)) is not None
+                ),
+                None,
+            )
+        )
+        if state is None:
+            continue
+        meter = row[meter_index] if meter_index is not None and meter_index < len(row) else ""
+        readings[timestamp] = MeterReading(timestamp, state, meter)
+    return sorted(readings.values(), key=lambda item: item.timestamp)
+
+
 def _matches(value: str, fmt: str) -> bool:
     try:
         datetime.strptime(value, fmt)
     except ValueError:
         return False
     return True
+
 
 def parse_consumption_places(html: str) -> list[ConsumptionPlace]:
     """Extract the verified ConsumptionPlaceList WebForms grid."""
@@ -408,6 +547,7 @@ def parse_consumption_places(html: str) -> list[ConsumptionPlace]:
         seen.add(evidence_key)
         places.append(ConsumptionPlace(*((cells + [""] * 5)[:5])))
     return places
+
 
 class VsChrudimClient:
     """Stateful, in-memory authenticated portal client."""
@@ -443,8 +583,7 @@ class VsChrudimClient:
         html, url = await self._request_text("GET", PLACES_URL)
         selected_html, selected_url = await self._select_place(html, url, place)
         readings_html, readings_url = await self._open_measured_states(selected_html, selected_url)
-        csv = await self._download_csv(readings_html, readings_url)
-        readings = tuple(parse_readings_csv(csv))
+        readings = await self._read_readings(readings_html, readings_url)
         return WaterMeterData(place, readings, latest_consumption(readings))
 
     async def async_get_history(
@@ -468,8 +607,7 @@ class VsChrudimClient:
             date_from,
             date_to,
         )
-        csv = await self._download_csv(filtered_html, filtered_url)
-        readings = tuple(parse_readings_csv(csv))
+        readings = await self._read_readings(filtered_html, filtered_url)
         inside = tuple(
             reading
             for reading in readings
@@ -480,6 +618,17 @@ class VsChrudimClient:
                 "The portal CSV did not overlap the requested custom date range"
             )
         return inside
+
+    async def _read_readings(self, html: str, url: str) -> tuple[MeterReading, ...]:
+        """Prefer the verified export and fall back to the rendered data table."""
+        try:
+            csv = await self._download_csv(html, url)
+        except VsChrudimProtocolError:
+            table_readings = tuple(parse_readings_html(html))
+            if table_readings:
+                return table_readings
+            raise
+        return tuple(parse_readings_csv(csv))
 
     async def _ensure_login(self) -> None:
         if not self._logged_in:

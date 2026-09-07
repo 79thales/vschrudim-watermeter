@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.4 - 2026-09-07
+
+- Fall back to the rendered measured-state table when the portal omits its CSV
+  link and WebForms export control.
+- Port the table-selection, Czech date and meter-state parsing approach from
+  WebDownloader while keeping customer values out of logs and diagnostics.
+- Keep the last successful meter readings available during transient update
+  failures, keep the locally configured water price independent of the portal,
+  and leave diagnostic entities available to explain the failure.
+- Add a cumulative total-water-cost entity and import matching hourly cost
+  statistics, because Home Assistant does not retroactively price backfilled
+  volume statistics.
+- Add regression coverage for direct HTML-table readings and API fallback.
+
 ## 0.4.3 - 2026-09-07
 
 - Validate export responses with the same CSV-column normalization used by the

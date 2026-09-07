@@ -19,7 +19,7 @@ The worker starts after the first successful integration setup and resumes after
 
 ## Energy dashboard contract
 
-`sensor.<place>_meter_state` remains the source sensor with `device_class: water`, `state_class: total_increasing`, and unit `m³`. History is imported as an internal Recorder statistic with this same entity ID, because Home Assistant disables entity-based price tracking for external statistics. `sensor.<place>_water_price` remains `CZK/m³` and can therefore be selected as the current price entity; historic tariff changes are deliberately out of scope until a dated tariff source is available.
+`sensor.<place>_meter_state` remains the source sensor with `device_class: water`, `state_class: total_increasing`, and unit `m³`. History is imported as an internal Recorder statistic with this same entity ID. `sensor.<place>_total_water_cost` mirrors the cumulative register multiplied by the configured `CZK/m³` tariff, and matching hourly cost statistics are imported under its entity ID. This is necessary because Home Assistant's generated fixed/current-price cost sensor reacts only to future entity state changes and does not retroactively price imported history. Historic tariff changes are deliberately out of scope until a dated tariff source is available.
 
 ## Acceptance checks
 

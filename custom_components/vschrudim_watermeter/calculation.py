@@ -19,3 +19,8 @@ def latest_consumption(readings: Iterable[MeterReading]) -> float | None:
     """Return the latest valid incremental consumption in m³."""
     values = consumption_deltas(readings)
     return values[-1][1] if values else None
+
+
+def total_cost(meter_state_m3: float, price_per_m3: float) -> float:
+    """Return a stable cumulative cost matching the cumulative meter state."""
+    return round(meter_state_m3 * price_per_m3, 6)

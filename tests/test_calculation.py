@@ -17,3 +17,7 @@ class CalculationTests(unittest.TestCase):
     def test_deltas_handle_initial_and_meter_reset(self):
         readings = [models.MeterReading(datetime(2026, 3, 29, 1), 5.0), models.MeterReading(datetime(2026, 3, 29, 3), 5.2), models.MeterReading(datetime(2026, 3, 29, 4), 1.0)]
         self.assertEqual([value for _, value in calculation.consumption_deltas(readings)], [None, 0.2, None])
+
+    def test_total_cost_uses_configured_unit_price(self):
+        self.assertEqual(calculation.total_cost(10.125, 120.0), 1215.0)
+        self.assertEqual(calculation.total_cost(10.125, 0.0), 0.0)

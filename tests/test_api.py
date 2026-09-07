@@ -38,6 +38,23 @@ class ApiParserTests(unittest.TestCase):
         self.assertEqual(len(readings), 1)
         self.assertEqual(readings[0].meter_state_m3, 10.0)
 
+    def test_parse_readings_html_table(self):
+        readings = api.parse_readings_html(
+            """
+            <table><tr><th>Unrelated</th></tr><tr><td>Text</td></tr></table>
+            <table id="measurements">
+              <tr><th>Měřidlo</th><th>Čas</th><th>Stav vodoměru</th><th>Spotřeba</th></tr>
+              <tr><td>A</td><td>01.01.2026 00:00</td><td>10,000 m³</td><td>0,000 m³</td></tr>
+              <tr><td>A</td><td>01.01.2026 01:00</td><td>10,125 m³</td><td>0,125 m³</td></tr>
+            </table>
+            """
+        )
+
+        self.assertEqual(
+            [(item.timestamp.hour, item.meter_state_m3) for item in readings],
+            [(0, 10.0), (1, 10.125)],
+        )
+
     def test_parse_consumption_places(self):
         html = '<table id="x_gvConsumptionPlaces"><tr><th>x</th></tr><tr><td>123</td><td>456</td><td>Example 1</td><td>C-1</td><td>v1</td></tr></table>'
         place = api.parse_consumption_places(html)[0]
@@ -83,6 +100,22 @@ class ApiParserTests(unittest.TestCase):
         )
 
 class MeasuredStatesNavigationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_falls_back_to_rendered_readings_table(self):
+        client = api.VsChrudimClient(object(), "user", "password")
+        html = """
+        <table>
+          <tr><th>Čas</th><th>Stav</th></tr>
+          <tr><td>01.01.2026 00:00</td><td>10,250 m³</td></tr>
+        </table>
+        """
+
+        readings = await client._read_readings(
+            html,
+            "https://zakaznik.vschrudim.cz/Userdata/ProfileData.aspx",
+        )
+
+        self.assertEqual(len(readings), 1)
+        self.assertEqual(readings[0].meter_state_m3, 10.25)
     async def test_downloads_document_show_export_without_csv_label(self):
         client = api.VsChrudimClient(object(), "user", "password")
         calls = []
