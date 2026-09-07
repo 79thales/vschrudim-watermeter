@@ -30,6 +30,14 @@ class ApiParserTests(unittest.TestCase):
         with self.assertRaises(api.VsChrudimProtocolError):
             api.parse_readings_csv("foo;bar\n1;2")
 
+    def test_parse_csv_accepts_quoted_accented_header_and_bom(self):
+        readings = api.parse_readings_csv(
+            '\ufeff"MĚŘIDLO";"ČAS";"STAV"\nA;01.01.2026 00:00;10,000\n'
+        )
+
+        self.assertEqual(len(readings), 1)
+        self.assertEqual(readings[0].meter_state_m3, 10.0)
+
     def test_parse_consumption_places(self):
         html = '<table id="x_gvConsumptionPlaces"><tr><th>x</th></tr><tr><td>123</td><td>456</td><td>Example 1</td><td>C-1</td><td>v1</td></tr></table>'
         place = api.parse_consumption_places(html)[0]
@@ -111,9 +119,32 @@ class MeasuredStatesNavigationTests(unittest.IsolatedAsyncioTestCase):
             return ("<html>Unexpected response</html>", url)
 
         client._request_text = request
-        with self.assertRaisesRegex(api.VsChrudimProtocolError, "verified CSV"):
+        with self.assertRaisesRegex(api.VsChrudimProtocolError, "no valid"):
             await client._download_csv(
                 '<a href="/DocumentShow.aspx?id=example">Export</a>',
+                "https://zakaznik.vschrudim.cz/Userdata/ProfileData.aspx",
+            )
+
+    async def test_accepts_quoted_accented_export_header(self):
+        client = api.VsChrudimClient(object(), "user", "password")
+
+        async def request(method, url, data=None):
+            return ('\ufeff"MĚŘIDLO";"ČAS";"STAV"\n', url)
+
+        client._request_text = request
+        content = await client._download_csv(
+            '<a href="/DocumentShow.aspx?id=example">Export</a>',
+            "https://zakaznik.vschrudim.cz/Userdata/ProfileData.aspx",
+        )
+
+        self.assertIn("MĚŘIDLO", content)
+
+    async def test_distinguishes_missing_export_control(self):
+        client = api.VsChrudimClient(object(), "user", "password")
+
+        with self.assertRaisesRegex(api.VsChrudimProtocolError, "no recognizable"):
+            await client._download_csv(
+                "<form><input name=\"ordinary\" value=\"nothing\"></form>",
                 "https://zakaznik.vschrudim.cz/Userdata/ProfileData.aspx",
             )
 

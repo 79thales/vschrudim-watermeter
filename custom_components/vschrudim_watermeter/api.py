@@ -11,6 +11,7 @@ from html import unescape
 from html.parser import HTMLParser
 import re
 from typing import Final
+import unicodedata
 from urllib.parse import urljoin
 
 import aiohttp
@@ -335,12 +336,38 @@ def _number(value: str) -> float | None:
     except ValueError:
         return None
 
+
+def _csv_header_key(value: str) -> str:
+    """Normalize quoted Czech CSV headers for structural validation."""
+    value = value.lstrip("\ufeff").strip().strip('"')
+    return "".join(
+        character
+        for character in unicodedata.normalize("NFKD", value).casefold()
+        if not unicodedata.combining(character)
+    )
+
+
+def _has_readings_csv_header(content: str) -> bool:
+    """Return whether content has the columns required by the parser."""
+    first_line = next(
+        (
+            line.strip()
+            for line in content.replace("\r", "").split("\n")
+            if line.strip()
+        ),
+        "",
+    )
+    headers = [_csv_header_key(value) for value in first_line.split(";")]
+    return any(value in {"cas", "datum"} for value in headers) and any(
+        "stav" in value for value in headers
+    )
+
 def parse_readings_csv(content: str) -> list[MeterReading]:
     """Parse the documented ``MERIDLO;CAS;STAV`` CSV export defensively."""
     lines = [line.strip() for line in content.replace("\r", "").split("\n") if line.strip()]
     if not lines:
         return []
-    headers = [_normalized(value.lstrip("\ufeff\"").rstrip("\"")) for value in lines[0].split(";")]
+    headers = [_csv_header_key(value) for value in lines[0].split(";")]
     try:
         date_index = next(i for i, value in enumerate(headers) if value in {"cas", "datum"})
         state_index = next(i for i, value in enumerate(headers) if "stav" in value)
@@ -610,7 +637,9 @@ class VsChrudimClient:
             if score >= 45:
                 candidates.append((score, "submit", name))
 
+        attempted = 0
         for _, kind, value in sorted(candidates, reverse=True):
+            attempted += 1
             if kind == "link":
                 content, _ = await self._request_text("GET", urljoin(url, value))
             else:
@@ -624,10 +653,16 @@ class VsChrudimClient:
             if self._looks_like_login(content):
                 self._logged_in = False
                 raise VsChrudimAuthError("Authenticated session expired")
-            if not re.search(r"MERIDLO\s*;\s*CAS\s*;\s*STAV", content, re.I):
+            if not _has_readings_csv_header(content):
                 continue
             return content
-        raise VsChrudimProtocolError("The portal did not expose a verified CSV export link")
+        if attempted:
+            raise VsChrudimProtocolError(
+                f"The portal returned no valid water-reading CSV from {attempted} export candidate(s)"
+            )
+        raise VsChrudimProtocolError(
+            "The portal exposed no recognizable CSV link or WebForms export control"
+        )
 
     @staticmethod
     def _looks_like_login(html: str) -> bool:

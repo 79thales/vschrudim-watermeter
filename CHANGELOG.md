@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.3 - 2026-09-07
+
+- Validate export responses with the same CSV-column normalization used by the
+  parser, including quoted, BOM-prefixed and Czech accented headers.
+- Distinguish a missing export control from an export response with invalid
+  content without logging response data or customer values.
+- Add regression coverage for the accepted header variants and both failure
+  categories.
+
 ## 0.4.2 - 2026-09-07
 
 - Match the working WebDownloader export flow by supporting both direct export
