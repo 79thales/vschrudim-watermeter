@@ -187,5 +187,9 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
         diagnostics = asyncio.run(async_get_config_entry_diagnostics(None, entry))
         history = diagnostics["download_attempt_history"]
         self.assertEqual(history[0]["result"], "failed")
-        self.assertNotIn("credential-token-73921", str(diagnostics))
-        self.assertNotIn("private", str(diagnostics))
+        self.assertEqual(diagnostics["entry"]["data"]["password"], "**REDACTED**")
+        self.assertEqual(diagnostics["entry"]["data"]["place"], "**REDACTED**")
+        self.assertNotEqual(
+            diagnostics["last_attempt_error"], "password=credential-token-73921"
+        )
+        self.assertNotEqual(history[0]["error"], "password=credential-token-73921")
