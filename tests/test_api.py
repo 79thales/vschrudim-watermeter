@@ -299,6 +299,7 @@ class MeasuredStatesNavigationTests(unittest.IsolatedAsyncioTestCase):
           <input type="text" name="ctl00$GraphFilter1$edDateTo" value="">
           <input type="hidden" name="ctl00$GraphFilter1$hfDateFrom" value="">
           <input type="hidden" name="ctl00$GraphFilter1$hfDateTo" value="">
+          <input type="text" name="ctl00$ProfileData$context" value="keep-me">
           <input type="submit" name="ctl00$GraphFilter1$btnRenew" value="Update">
           <select name="ctl00$GraphFilter1$edGraphLength">
             <option value="W">Week</option><option value="U">Custom</option>
@@ -323,6 +324,8 @@ class MeasuredStatesNavigationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(calls), 2)
         self.assertEqual(calls[0][2]["__EVENTTARGET"], "ctl00$GraphFilter1$edGraphLength")
         self.assertEqual(calls[0][2]["ctl00$GraphFilter1$edGraphLength"], "U")
+        self.assertEqual(calls[0][2]["ctl00$ProfileData$context"], "keep-me")
         self.assertEqual(calls[1][2]["ctl00$GraphFilter1$edDateFrom"], "02.01.2026")
         self.assertEqual(calls[1][2]["ctl00$GraphFilter1$hfDateTo"], "03.02.2026")
         self.assertEqual(calls[1][2]["ctl00$GraphFilter1$btnRenew"], "Update")
+        self.assertEqual(calls[1][2]["ctl00$ProfileData$context"], "keep-me")

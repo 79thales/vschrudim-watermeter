@@ -712,7 +712,10 @@ class VsChrudimClient:
                 "The portal did not expose the measured-state period selector"
             )
 
-        period_payload = _webforms_payload(form)
+        # WebDownloader changes the select and then submits the actual browser
+        # form. FormData includes every successful input, not only WebForms'
+        # hidden state and select controls.
+        period_payload = _complete_form_payload(form)
         period_payload[period_name] = "U"
         period_payload["__EVENTTARGET"] = period_name
         period_payload["__EVENTARGUMENT"] = ""
@@ -745,7 +748,10 @@ class VsChrudimClient:
 
         formatted_from = date_from.strftime("%d.%m.%Y")
         formatted_to = date_to.strftime("%d.%m.%Y")
-        range_payload = _webforms_payload(form)
+        # Clicking btnRenew in WebDownloader submits the complete form as well.
+        # Retain unrelated portal inputs because server controls may depend on
+        # them when producing the filtered result and its export action.
+        range_payload = _complete_form_payload(form)
         range_payload.update(
             {
                 period_name: "U",

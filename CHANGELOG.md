@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.6 - 2026-09-07
+
+- Submit the complete measured-state filter form when changing to a custom
+  period and when applying its dates, matching the working WebDownloader
+  browser flow.
+- Preserve all successful portal input controls required to render the
+  filtered hourly result and its export action.
+- Add regression coverage for complete custom-period WebForms payloads.
+
 ## 0.4.5 - 2026-09-07
 
 - Fix integration setup by importing the configured-price constants used by
