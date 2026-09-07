@@ -526,10 +526,15 @@ class VsChrudimClient:
     async def _download_csv(self, html: str, url: str) -> str:
         form = _parse_form(html)
         for text, href in form.links:
-            if "csv" in _normalized(text + " " + href) and not href.casefold().startswith("javascript:"):
-                content, _ = await self._request_text("GET", urljoin(url, href))
-                if re.search(r"MERIDLO\s*;\s*CAS\s*;\s*STAV", content, re.I):
-                    return content
+            normalized_link = _normalized(text + " " + href)
+            href_casefold = href.casefold()
+            if href_casefold.startswith("javascript:"):
+                continue
+            if "csv" not in normalized_link and "documentshow.aspx" not in href_casefold:
+                continue
+            content, _ = await self._request_text("GET", urljoin(url, href))
+            if re.search(r"MERIDLO\s*;\s*CAS\s*;\s*STAV", content, re.I):
+                return content
         raise VsChrudimProtocolError("The portal did not expose a verified CSV export link")
 
     @staticmethod

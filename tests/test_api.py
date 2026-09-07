@@ -75,6 +75,48 @@ class ApiParserTests(unittest.TestCase):
         )
 
 class MeasuredStatesNavigationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_downloads_document_show_export_without_csv_label(self):
+        client = api.VsChrudimClient(object(), "user", "password")
+        calls = []
+
+        async def request(method, url, data=None):
+            calls.append((method, url, data))
+            return (
+                "MERIDLO;CAS;STAV\nA;01.01.2026 00:00;10,000\n",
+                url,
+            )
+
+        client._request_text = request
+        content = await client._download_csv(
+            '<a href="/DocumentShow.aspx?id=example"><img alt="Export"></a>',
+            "https://zakaznik.vschrudim.cz/Userdata/ProfileData.aspx",
+        )
+
+        self.assertIn("MERIDLO;CAS;STAV", content)
+        self.assertEqual(
+            calls,
+            [
+                (
+                    "GET",
+                    "https://zakaznik.vschrudim.cz/DocumentShow.aspx?id=example",
+                    None,
+                )
+            ],
+        )
+
+    async def test_rejects_document_show_response_without_verified_header(self):
+        client = api.VsChrudimClient(object(), "user", "password")
+
+        async def request(method, url, data=None):
+            return ("<html>Unexpected response</html>", url)
+
+        client._request_text = request
+        with self.assertRaisesRegex(api.VsChrudimProtocolError, "verified CSV"):
+            await client._download_csv(
+                '<a href="/DocumentShow.aspx?id=example">Export</a>',
+                "https://zakaznik.vschrudim.cz/Userdata/ProfileData.aspx",
+            )
+
     async def test_uses_verified_readings_url_and_requires_filter(self):
         client = api.VsChrudimClient(object(), "user", "password")
         calls = []

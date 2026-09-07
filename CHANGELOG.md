@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.1 - 2026-09-07
+
+- Recognize the portal's `DocumentShow.aspx` history export even when its link
+  text and URL do not contain the word `CSV`.
+- Continue to accept export responses only after verifying the expected
+  `MERIDLO;CAS;STAV` header.
+- Add regression coverage for accepted and invalid `DocumentShow.aspx`
+  responses.
+
 ## 0.4.0 - 2026-09-07
 
 - Change the default polling interval to one hour while preserving explicitly
