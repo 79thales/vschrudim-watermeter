@@ -34,6 +34,30 @@ class VsChrudimProtocolError(VsChrudimError):
 class VsChrudimConnectionError(VsChrudimError):
     """The portal could not be reached."""
 
+
+_MISSING_EXPORT_ERROR: Final = (
+    "The portal exposed no recognizable CSV link or WebForms export control"
+)
+
+
+def is_empty_history_boundary_error(
+    error: VsChrudimError,
+    *,
+    requested_to: date,
+    earliest_reading: date | None,
+) -> bool:
+    """Identify the portal's empty-period response before available history.
+
+    The measured-states page omits its export action when a filtered period has
+    no readings. Only accept that response as the history boundary after a
+    newer request has already established the earliest available reading.
+    """
+    return (
+        earliest_reading is not None
+        and requested_to < earliest_reading
+        and str(error) == _MISSING_EXPORT_ERROR
+    )
+
 class _FormParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
@@ -815,9 +839,7 @@ class VsChrudimClient:
             raise VsChrudimProtocolError(
                 f"The portal returned no valid water-reading CSV from {attempted} export candidate(s)"
             )
-        raise VsChrudimProtocolError(
-            "The portal exposed no recognizable CSV link or WebForms export control"
-        )
+        raise VsChrudimProtocolError(_MISSING_EXPORT_ERROR)
 
     @staticmethod
     def _looks_like_login(html: str) -> bool:

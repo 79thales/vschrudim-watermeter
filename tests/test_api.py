@@ -100,6 +100,33 @@ class ApiParserTests(unittest.TestCase):
         )
 
 class MeasuredStatesNavigationTests(unittest.IsolatedAsyncioTestCase):
+    def test_empty_range_before_earliest_reading_finishes_history_scan(self):
+        error = api.VsChrudimProtocolError(
+            "The portal exposed no recognizable CSV link or WebForms export control"
+        )
+
+        self.assertTrue(
+            api.is_empty_history_boundary_error(
+                error,
+                requested_to=date(2025, 10, 1),
+                earliest_reading=date(2025, 10, 11),
+            )
+        )
+        self.assertFalse(
+            api.is_empty_history_boundary_error(
+                error,
+                requested_to=date(2025, 11, 1),
+                earliest_reading=date(2025, 10, 11),
+            )
+        )
+        self.assertFalse(
+            api.is_empty_history_boundary_error(
+                error,
+                requested_to=date(2025, 10, 1),
+                earliest_reading=None,
+            )
+        )
+
     async def test_falls_back_to_rendered_readings_table(self):
         client = api.VsChrudimClient(object(), "user", "password")
         html = """

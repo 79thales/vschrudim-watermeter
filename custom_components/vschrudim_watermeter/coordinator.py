@@ -10,7 +10,12 @@ from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
-from .api import VsChrudimAuthError, VsChrudimClient, VsChrudimError
+from .api import (
+    VsChrudimAuthError,
+    VsChrudimClient,
+    VsChrudimError,
+    is_empty_history_boundary_error,
+)
 from .calculation import latest_consumption
 from .const import (
     CONF_FAILURE_THRESHOLD,
@@ -276,6 +281,7 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
             self.history_backfill_imported_hours = 0
         self.history_backfill_status = "running"
         self.history_backfill_error = None
+        async_dismiss(self.hass, self._history_notification_id)
         self.async_update_listeners()
         task = self.entry.async_create_background_task(
             self.hass,
@@ -318,7 +324,19 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
                                 self.place, chunk_from, chunk_to
                             )
                         break
-                    except VsChrudimError:
+                    except VsChrudimError as err:
+                        if is_empty_history_boundary_error(
+                            err,
+                            requested_to=chunk_to,
+                            earliest_reading=self.history_earliest_date,
+                        ):
+                            _LOGGER.info(
+                                "Water-meter history begins on %s; older empty "
+                                "portal ranges will not be requested",
+                                self.history_earliest_date,
+                            )
+                            await self._async_finish_history_backfill()
+                            return
                         if attempt + 1 >= maximum_attempts:
                             raise
                         await asyncio.sleep(

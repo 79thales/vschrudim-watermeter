@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.7 - 2026-09-07
+
+- Treat a filtered range without an export action as the beginning of the
+  portal's available history only when newer hourly readings have already
+  established that boundary.
+- Complete the resumable backfill at that boundary instead of repeatedly
+  reporting an error for dates before the first available smart-meter reading.
+- Dismiss a stale incomplete-history notification as soon as a saved backfill
+  resumes.
+
 ## 0.4.6 - 2026-09-07
 
 - Submit the complete measured-state filter form when changing to a custom
