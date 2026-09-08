@@ -37,6 +37,12 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
             if coordinator.last_download_latest_timestamp
             else None,
             "last_download_reading_count": coordinator.last_download_reading_count,
+            "last_portal_page_features": list(
+                coordinator.last_portal_page_features
+            ),
+            "last_reading_quality_flags": list(
+                coordinator.last_reading_quality_flags
+            ),
             "duplicate_readings_merged": coordinator.last_duplicate_readings_merged,
             "missing_readings_recovered": coordinator.last_missing_readings_recovered,
             "current_missing_hourly_readings": coordinator.current_missing_hourly_readings,

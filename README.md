@@ -118,6 +118,9 @@ Diagnostic entities show:
 - the number of currently missing hourly readings and their oldest timestamp,
 - data-quality counters for the most recent download: returned readings,
   duplicate timestamps merged, and gaps recovered by retry downloads,
+- a privacy-safe profile of the recognized portal page structures and
+  informational reading-quality flags (for example a lower meter register),
+  which never reject an otherwise valid download,
 - three-year history progress, imported-hour count and the last backfill error (`History backfill status`).
 
 `Mark portal data as delayed after` is optional and defaults to `0` (disabled).
@@ -147,6 +150,13 @@ problem does not create duplicate alerts. The state contains no portal or
 customer data, and its persistence is best effort: a storage failure never
 prevents an otherwise valid portal update.
 
+All portal transfers are serialized, including normal polling, historical
+backfill and the device download tests. When an established session expires,
+the client creates one fresh session and replays the complete request; rejected
+credentials and a second expiry still use Home Assistant's normal
+reauthentication flow. Consecutive failed **automatic** updates use a bounded
+exponential retry delay. This does not delay the **Test download** button.
+
 ## Portal compatibility
 
 VS Chrudim supplies an authenticated ASP.NET WebForms website, not a documented public API. The client follows fields, menu links, WebForms postbacks and CSV-export links found in the authenticated HTML, and fails safely when the expected structure is absent. It does not guess REST endpoints or run WebDownloader.
@@ -171,6 +181,12 @@ response data. These guards fail a malformed or stalled response safely without
 changing normal polling, backfill or Energy-statistics processing. A running
 backfill is cancelled and checkpoints its progress when the integration is
 unloaded, then resumes from that checkpoint after setup.
+
+Downloaded diagnostics describe recognized page structures only with a fixed
+safe vocabulary (such as `webforms_form`, `csv_export_postback` and
+`html_table`). They also report non-blocking quality flags such as a lower
+meter register. Neither diagnostic includes HTML, control names or values,
+portal URLs, credentials or customer identifiers.
 
 ## Security
 

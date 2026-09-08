@@ -1,6 +1,6 @@
 """Tests with anonymized, static portal export examples."""
 import importlib.util
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 import sys
 import types
@@ -71,6 +71,48 @@ class ApiParserTests(unittest.TestCase):
         )
 
         self.assertEqual([(item.timestamp.hour, item.meter_state_m3) for item in readings], [(0, 10.25)])
+
+    def test_portal_page_profile_has_only_recognized_safe_features(self):
+        features = api._portal_page_features(
+            """
+            <form method="post" action="./ProfileData.aspx">
+              <a href="/DocumentShow.aspx?id=private">Export</a>
+              <a href="javascript:__doPostBack('private$export','')">Export CSV</a>
+              <input type="submit" name="privateExport" value="Export data">
+            </form>
+            <table><tr><th>Měřidlo</th><th>Čas</th><th>Stav</th></tr></table>
+            """
+        )
+
+        self.assertEqual(
+            features,
+            (
+                "csv_export_link",
+                "csv_export_postback",
+                "csv_export_submit",
+                "html_table",
+                "webforms_form",
+            ),
+        )
+        self.assertNotIn("private", " ".join(features))
+
+    def test_reading_quality_flags_report_but_do_not_reject_meter_reset(self):
+        flags = api._reading_quality_flags(
+            (
+                api.MeterReading(datetime(2026, 1, 1, 0), 10.0),
+                api.MeterReading(datetime(2026, 1, 1, 1), 9.0),
+                api.MeterReading(datetime(2026, 1, 1, 1), -1.0),
+            )
+        )
+
+        self.assertEqual(
+            flags,
+            (
+                "meter_state_decreased",
+                "negative_meter_state",
+                "timestamps_not_strictly_increasing",
+            ),
+        )
 
     def test_parse_consumption_places(self):
         html = '<table id="x_gvConsumptionPlaces"><tr><th>x</th></tr><tr><td>123</td><td>456</td><td>Example 1</td><td>C-1</td><td>v1</td></tr></table>'
@@ -307,6 +349,11 @@ class MeasuredStatesNavigationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(result.readings), 1)
         self.assertEqual(result.readings[0].meter_state_m3, 10.25)
         self.assertEqual(result.download_metadata.source, "html_table")
+        self.assertEqual(
+            result.download_metadata.portal_page_features,
+            ("html_table",),
+        )
+        self.assertEqual(result.download_metadata.reading_quality_flags, ())
         self.assertEqual(
             [(method, url) for method, url, _ in calls],
             [("GET", api.PLACES_URL), ("GET", api.READINGS_URL)],

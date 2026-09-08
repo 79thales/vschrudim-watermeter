@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.18 - 2026-09-08
+
+- Keep portal transfers serialized, retain the single safe re-login replay for
+  an expired session, and use bounded exponential retry delays only for
+  consecutive failed automatic updates. Manual download tests remain
+  immediately available.
+- Isolate unexpected coordinator and Recorder write errors so a verified live
+  portal download is not discarded by auxiliary diagnostics or statistics
+  work.
+- Add privacy-safe parser feature profiles and non-blocking reading-quality
+  flags to the latest-download diagnostics and bounded download-attempt
+  history. They contain only a fixed vocabulary, never HTML, form values,
+  URLs, credentials or customer identifiers.
+
 ## 0.4.17 - 2026-09-08
 
 - Fix the 0.4.16 response-size guard so it reads every received HTTP chunk;

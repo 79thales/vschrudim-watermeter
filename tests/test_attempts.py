@@ -29,6 +29,8 @@ class DownloadAttemptTests(unittest.TestCase):
             reading_count=10,
             latest_timestamp="2026-09-06T15:00:00",
             missing_hourly_readings=0,
+            portal_page_features=("html_table", "webforms_form"),
+            reading_quality_flags=("meter_state_decreased",),
         )
 
     def test_history_is_bounded(self):
@@ -74,3 +76,17 @@ class DownloadAttemptTests(unittest.TestCase):
 
         self.assertNotIn("credential-token-73921", serialized["error"])
         self.assertNotIn("example.invalid", serialized["error"])
+
+    def test_serialization_discards_unknown_page_profile_values(self):
+        original = self._attempt(4)
+        serialized = original.as_dict()
+        serialized["portal_page_features"] = ["html_table", "private-control"]
+        serialized["reading_quality_flags"] = [
+            "meter_state_decreased",
+            "unexpected-portal-value",
+        ]
+
+        restored = attempts.DownloadAttempt.from_dict(serialized)
+
+        self.assertEqual(restored.portal_page_features, ("html_table",))
+        self.assertEqual(restored.reading_quality_flags, ("meter_state_decreased",))

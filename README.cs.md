@@ -117,6 +117,9 @@ Diagnostické entity zobrazují:
 - počet aktuálně chybějících hodinových odečtů a čas nejstarší mezery,
 - počitadla kvality posledního stažení: počet vrácených odečtů, sloučené
   duplicitní časové značky a mezery doplněné opakovaným stažením,
+- bezpečný profil rozpoznaných struktur stránky portálu a pouze informační
+  příznaky kvality odečtů (například pokles stavu vodoměru), které nikdy samy
+  neodmítnou jinak platné stažení,
 - postup tříletého doplnění historie, počet importovaných hodin a poslední chybu (`History backfill status`).
 
 Volba **Označit data portálu jako zpožděná po** je nepovinná a výchozí hodnota
@@ -146,6 +149,14 @@ nevytvoří duplicitní upozornění. Stav neobsahuje údaje z portálu ani úda
 zákazníkovi a jeho uložení je pomocné: selhání úložiště nikdy nezabrání jinak
 platné aktualizaci portálu.
 
+Všechny přenosy z portálu se řadí za sebe, včetně běžné aktualizace,
+historického doplňování a testu stažení ze zařízení. Při vypršení dříve platné
+relace klient jednou vytvoří novou relaci a zopakuje celý požadavek; odmítnuté
+přihlašovací údaje nebo druhé vypršení stále použijí běžné opětovné ověření
+Home Assistantu. Po po sobě jdoucích neúspěšných **automatických**
+aktualizacích se prodleva pokusu postupně, nejvýše do jedné hodiny, prodlouží.
+Tlačítko **Otestovat stažení** se tím nezdržuje.
+
 ## Kompatibilita s portálem
 
 VS Chrudim poskytuje autentizovaný web ASP.NET WebForms, nikoli zdokumentované
@@ -171,6 +182,12 @@ odpovědi. Tyto pojistky bezpečně ukončí zaseknutou nebo neobvykle velkou
 odpověď, aniž mění běžné stahování, backfill nebo zpracování statistik Energie.
 Při odinstalování integrace se běžící backfill zastaví, uloží postup a po dalším
 nastavení pokračuje od uloženého místa.
+
+Stažená diagnostika popisuje rozpoznané struktury stránky pouze pevnou,
+bezpečnou slovní zásobou (například `webforms_form`, `csv_export_postback` a
+`html_table`). Dále uvádí neblokující příznaky kvality, například pokles stavu
+vodoměru. Diagnostika neobsahuje HTML, názvy ani hodnoty ovladačů, URL portálu,
+přihlašovací údaje ani identifikátory zákazníka.
 
 ## Bezpečnost
 

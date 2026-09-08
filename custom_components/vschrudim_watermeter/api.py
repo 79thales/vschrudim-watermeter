@@ -12,6 +12,7 @@ from dataclasses import dataclass, replace
 from datetime import date, datetime
 from html import unescape
 from html.parser import HTMLParser
+import math
 import re
 from collections.abc import Awaitable, Callable
 from typing import Final, TypeVar
@@ -85,6 +86,7 @@ class _FormParser(HTMLParser):
         super().__init__()
         self.action = ""
         self.method = "GET"
+        self.has_form = False
         self.inputs: dict[str, str] = {}
         # ASP.NET renders some read-only controls with a stable ``id`` but
         # without the expected ``name``. Keep these separate from submitted
@@ -109,6 +111,7 @@ class _FormParser(HTMLParser):
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         values = dict(attrs)
         if tag == "form":
+            self.has_form = True
             self.action = values.get("action", "") or ""
             self.method = (values.get("method", "GET") or "GET").upper()
         elif tag == "input":
@@ -321,6 +324,65 @@ def _export_candidate_score(value: str) -> int:
     if any(word in normalized for word in ("stav", "data", "soubor")):
         score += 20
     return score
+
+
+def _portal_page_features(html: str) -> tuple[str, ...]:
+    """Return a fixed, privacy-safe profile of recognized page structures.
+
+    The profile deliberately stores neither raw HTML nor control names or
+    values. It helps distinguish a provider markup change from a transport
+    failure while remaining safe to include in downloaded diagnostics.
+    """
+    form = _parse_form(html)
+    features: set[str] = set()
+    if form.has_form:
+        features.add("webforms_form")
+    if re.search(r"<\s*table\b", html, re.I):
+        features.add("html_table")
+    for text, href in form.links:
+        if _export_candidate_score(text + " " + href) < 45:
+            continue
+        if href.casefold().startswith("javascript:"):
+            if _postback(href):
+                features.add("csv_export_postback")
+        else:
+            features.add("csv_export_link")
+    if any(
+        _export_candidate_score(form.submit_descriptions.get(name, name)) >= 45
+        for name in form.submit_names
+    ):
+        features.add("csv_export_submit")
+    return tuple(sorted(features))
+
+
+def _reading_quality_flags(readings: tuple[MeterReading, ...]) -> tuple[str, ...]:
+    """Describe noteworthy readings without changing accepted portal data.
+
+    A lower register value can be a legitimate meter replacement or a portal
+    correction, so this deliberately reports rather than rejects it. The
+    existing statistics writer remains the sole authority for baseline logic.
+    """
+    flags: set[str] = set()
+    previous_timestamp: datetime | None = None
+    previous_state: float | None = None
+    for reading in readings:
+        state = reading.meter_state_m3
+        if not math.isfinite(state):
+            flags.add("non_finite_meter_state")
+        elif state < 0:
+            flags.add("negative_meter_state")
+        if previous_timestamp is not None and reading.timestamp <= previous_timestamp:
+            flags.add("timestamps_not_strictly_increasing")
+        if (
+            previous_state is not None
+            and math.isfinite(previous_state)
+            and math.isfinite(state)
+            and state < previous_state
+        ):
+            flags.add("meter_state_decreased")
+        previous_timestamp = reading.timestamp
+        previous_state = state
+    return tuple(sorted(flags))
 
 class _ConsumptionPlaceGridParser(HTMLParser):
     """Read the verified WebForms grid like the working WebDownloader DOM code."""
@@ -784,24 +846,39 @@ class VsChrudimClient:
         self, html: str, url: str
     ) -> tuple[tuple[MeterReading, ...], DownloadMetadata]:
         """Prefer the verified export and fall back to the rendered data table."""
+        page_features = _portal_page_features(html)
         try:
             csv, metadata = await self._download_csv_with_metadata(html, url)
         except VsChrudimProtocolError as err:
             table_readings = tuple(parse_readings_html(html))
+            failure_metadata = replace(
+                err.download_metadata,
+                portal_page_features=page_features,
+                html_table_detected=bool(table_readings),
+                reading_quality_flags=_reading_quality_flags(table_readings),
+            )
             if table_readings:
                 metadata = replace(
-                    err.download_metadata,
+                    failure_metadata,
                     source="html_table",
-                    html_table_detected=True,
                 )
                 return table_readings, metadata
-            raise
+            raise VsChrudimProtocolError(
+                str(err), download_metadata=failure_metadata
+            ) from err
         readings = tuple(parse_readings_csv(csv))
         if readings:
-            return readings, metadata
+            return readings, replace(
+                metadata,
+                portal_page_features=page_features,
+                reading_quality_flags=_reading_quality_flags(readings),
+            )
         raise VsChrudimProtocolError(
             "The portal returned a CSV without valid water readings",
-            download_metadata=metadata,
+            download_metadata=replace(
+                metadata,
+                portal_page_features=page_features,
+            ),
         )
 
     async def _ensure_login(self) -> None:

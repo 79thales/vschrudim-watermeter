@@ -60,6 +60,7 @@ _ATTEMPT_STORE_VERSION = 1
 _NOTIFICATION_STORE_VERSION = 1
 _BACKFILL_REQUEST_DELAY = 2
 _STATISTICS_OPERATION_TIMEOUT = 30
+_MAX_FAILURE_RETRY_SECONDS = 60 * 60
 _SOURCE_STATUSES = frozenset(
     {"unknown", "ok", "delayed_data", "authentication_required", "error"}
 )
@@ -86,6 +87,17 @@ def _three_years_ago(today: date) -> date:
     except ValueError:
         return today.replace(year=today.year - 3, day=28)
 
+
+def _failure_retry_after(failures: int, configured_delay: int) -> int:
+    """Return a bounded exponential retry delay for failed polling only.
+
+    A successful download resets the failure count. Manual diagnostics invoke
+    the client directly and are intentionally not delayed by this value.
+    """
+    base_delay = max(60, configured_delay)
+    exponent = min(max(0, failures - 1), 6)
+    return min(_MAX_FAILURE_RETRY_SECONDS, base_delay * (1 << exponent))
+
 class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry, client: VsChrudimClient, place: ConsumptionPlace) -> None:
         interval = timedelta(minutes=entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL.total_seconds() / 60))
@@ -109,6 +121,8 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
         self.last_download_source = "unknown"
         self.last_download_latest_timestamp: datetime | None = None
         self.last_download_reading_count = 0
+        self.last_portal_page_features: tuple[str, ...] = ()
+        self.last_reading_quality_flags: tuple[str, ...] = ()
         self.last_duplicate_readings_merged = 0
         self.last_missing_readings_recovered = 0
         self.current_missing_hourly_readings = 0
@@ -410,13 +424,18 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
                 merged = merge_readings(merged, retry_data.readings)
                 current_readings = merge_readings(current_readings, retry_data.readings)
                 missing = find_missing_hours(current_readings)
-            self._known_readings = merged
             self._consecutive_failures = 0
             self.last_download_source = data.download_metadata.source
             self.last_download_latest_timestamp = (
                 data.readings[-1].timestamp if data.readings else None
             )
             self.last_download_reading_count = len(data.readings)
+            self.last_portal_page_features = (
+                data.download_metadata.portal_page_features
+            )
+            self.last_reading_quality_flags = (
+                data.download_metadata.reading_quality_flags
+            )
             self.last_duplicate_readings_merged = duplicate_readings
             self.last_missing_readings_recovered = len(
                 set(initially_missing) - set(missing)
@@ -439,6 +458,7 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
             )
             await self._handle_missing_hours_notification(missing, attempts)
             await self._async_import_readings(merged)
+            self._known_readings = merged
             await self._async_record_download_attempt(
                 started_at,
                 started_monotonic,
@@ -484,7 +504,56 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
                 error=err,
                 notify_problem=self._consecutive_failures >= threshold,
             )
-            raise UpdateFailed(str(err), retry_after=max(60, int(self.entry.options.get(CONF_RETRY_DELAY, DEFAULT_RETRY_DELAY)))) from err
+            raise UpdateFailed(
+                str(err),
+                retry_after=_failure_retry_after(
+                    self._consecutive_failures,
+                    int(
+                        self.entry.options.get(
+                            CONF_RETRY_DELAY, DEFAULT_RETRY_DELAY
+                        )
+                    ),
+                ),
+            ) from err
+        except Exception as err:
+            # Keep an unexpected integration-side failure isolated to this
+            # coordinator update. Existing readings and external statistics
+            # remain untouched, while the safe diagnostics still record it.
+            _LOGGER.error(
+                "Unexpected VSChrudim watermeter update failure (%s)",
+                type(err).__name__,
+            )
+            safe_error = RuntimeError("Unexpected internal update error")
+            self.last_attempt_result = "failed"
+            self.last_attempt_error = str(safe_error)
+            await self._async_record_download_attempt(
+                started_at,
+                started_monotonic,
+                result="failed",
+                error=safe_error,
+            )
+            self._consecutive_failures += 1
+            threshold = int(
+                self.entry.options.get(
+                    CONF_FAILURE_THRESHOLD, DEFAULT_FAILURE_THRESHOLD
+                )
+            )
+            await self._set_source_status(
+                "error",
+                error=safe_error,
+                notify_problem=self._consecutive_failures >= threshold,
+            )
+            raise UpdateFailed(
+                "Unexpected VSChrudim watermeter update failure",
+                retry_after=_failure_retry_after(
+                    self._consecutive_failures,
+                    int(
+                        self.entry.options.get(
+                            CONF_RETRY_DELAY, DEFAULT_RETRY_DELAY
+                        )
+                    ),
+                ),
+            ) from err
 
     def async_register_meter_entity(self, entity_id: str) -> None:
         """Remember the legacy live sensor statistic ID for explicit cleanup."""
@@ -544,8 +613,11 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
                 initial_meter_state=initial_meter_state,
             )
             return imported
-        except HomeAssistantError as err:
-            _LOGGER.warning("Could not import water-meter history: %s", err)
+        except Exception as err:  # pragma: no cover - Recorder backend errors vary
+            # Statistics import is auxiliary to a verified live download. Do
+            # not discard current readings merely because Recorder temporarily
+            # cannot accept an external statistic write.
+            _LOGGER.error("Could not import water-meter history (%s)", type(err).__name__)
             return 0
 
     async def _async_statistics_seed(
@@ -615,6 +687,8 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
             export_candidates_found=metadata.export_candidates_found,
             export_candidates_attempted=metadata.export_candidates_attempted,
             html_table_detected=metadata.html_table_detected,
+            portal_page_features=metadata.portal_page_features,
+            reading_quality_flags=metadata.reading_quality_flags,
         )
         self.download_attempt_history = append_attempt(
             self.download_attempt_history, attempt
@@ -623,8 +697,10 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
             await self._attempt_store.async_save(
                 [item.as_dict() for item in self.download_attempt_history]
             )
-        except HomeAssistantError as err:
-            _LOGGER.warning("Could not save download-attempt diagnostics: %s", err)
+        except Exception:  # pragma: no cover - backend storage varies by HA
+            # The diagnostics store is deliberately best effort. It must not
+            # turn a completed source download into a failed update.
+            _LOGGER.warning("Could not save download-attempt diagnostics")
 
     @property
     def _energy_statistic_ids(self) -> list[str]:
@@ -887,6 +963,12 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
                 data.readings[-1].timestamp if data.readings else None
             )
             self.last_download_reading_count = len(data.readings)
+            self.last_portal_page_features = (
+                data.download_metadata.portal_page_features
+            )
+            self.last_reading_quality_flags = (
+                data.download_metadata.reading_quality_flags
+            )
             self.last_duplicate_readings_merged = 0
             self.last_missing_readings_recovered = 0
             self.current_missing_hourly_readings = len(missing)
@@ -911,6 +993,18 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
             raise HomeAssistantError(
                 self.last_test_download_error or "The portal download test failed"
             ) from err
+        except Exception as err:
+            _LOGGER.error(
+                "Unexpected VSChrudim watermeter test-download failure (%s)",
+                type(err).__name__,
+            )
+            safe_error = RuntimeError("Unexpected internal download-test error")
+            self.last_test_download_result = "failed"
+            self.last_test_download_error = str(safe_error)
+            await self._set_source_status(
+                "error", error=safe_error, notify_problem=True
+            )
+            raise HomeAssistantError("Unexpected portal download test failure") from err
         finally:
             self.async_update_listeners()
 

@@ -12,6 +12,23 @@ _VALID_RESULTS: Final = frozenset({"success", "failed", "authentication_failed"}
 _VALID_SOURCES: Final = frozenset(
     {"csv_link", "csv_postback", "csv_submit", "html_table", "unknown"}
 )
+_VALID_PORTAL_PAGE_FEATURES: Final = frozenset(
+    {
+        "webforms_form",
+        "html_table",
+        "csv_export_link",
+        "csv_export_postback",
+        "csv_export_submit",
+    }
+)
+_VALID_READING_QUALITY_FLAGS: Final = frozenset(
+    {
+        "negative_meter_state",
+        "non_finite_meter_state",
+        "meter_state_decreased",
+        "timestamps_not_strictly_increasing",
+    }
+)
 _MAX_ERROR_LENGTH: Final = 300
 
 
@@ -49,6 +66,13 @@ def _non_negative_int(value: object, default: int = 0) -> int:
         return default
 
 
+def _safe_values(value: object, allowed: frozenset[str]) -> tuple[str, ...]:
+    """Keep only known, non-sensitive diagnostic vocabulary values."""
+    if not isinstance(value, (list, tuple)):
+        return ()
+    return tuple(item for item in value if isinstance(item, str) and item in allowed)
+
+
 @dataclass(frozen=True, slots=True)
 class DownloadAttempt:
     """One completed top-level coordinator update attempt."""
@@ -67,11 +91,21 @@ class DownloadAttempt:
     export_candidates_found: int = 0
     export_candidates_attempted: int = 0
     html_table_detected: bool = False
+    portal_page_features: tuple[str, ...] = ()
+    reading_quality_flags: tuple[str, ...] = ()
 
     def as_dict(self) -> dict[str, object]:
         """Serialize only the explicitly safe diagnostic fields."""
         value = asdict(self)
         value["error"] = sanitize_error_message(self.error)
+        value["portal_page_features"] = list(
+            _safe_values(self.portal_page_features, _VALID_PORTAL_PAGE_FEATURES)
+        )
+        value["reading_quality_flags"] = list(
+            _safe_values(
+                self.reading_quality_flags, _VALID_READING_QUALITY_FLAGS
+            )
+        )
         return value
 
     @classmethod
@@ -111,6 +145,13 @@ class DownloadAttempt:
                 value.get("export_candidates_attempted")
             ),
             html_table_detected=bool(value.get("html_table_detected")),
+            portal_page_features=_safe_values(
+                value.get("portal_page_features"), _VALID_PORTAL_PAGE_FEATURES
+            ),
+            reading_quality_flags=_safe_values(
+                value.get("reading_quality_flags"),
+                _VALID_READING_QUALITY_FLAGS,
+            ),
         )
 
 

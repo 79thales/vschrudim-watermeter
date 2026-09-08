@@ -103,6 +103,19 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
                 "delayed_data",
             )
 
+    def test_failed_polling_uses_bounded_exponential_backoff(self):
+        from custom_components.vschrudim_watermeter.coordinator import (
+            _MAX_FAILURE_RETRY_SECONDS,
+            _failure_retry_after,
+        )
+
+        self.assertEqual(_failure_retry_after(1, 30), 60)
+        self.assertEqual(_failure_retry_after(2, 30), 120)
+        self.assertEqual(_failure_retry_after(4, 30), 480)
+        self.assertEqual(
+            _failure_retry_after(999, 900), _MAX_FAILURE_RETRY_SECONDS
+        )
+
     def test_source_notifications_only_follow_problem_state_changes(self):
         from custom_components.vschrudim_watermeter import coordinator as module
         from custom_components.vschrudim_watermeter.coordinator import (
@@ -523,6 +536,37 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
         self.assertEqual(coordinator._known_readings, known)
         coordinator._async_record_download_attempt.assert_awaited_once()
 
+    def test_unexpected_update_error_is_isolated_and_uses_safe_retry(self):
+        from homeassistant.helpers.update_coordinator import UpdateFailed
+        from custom_components.vschrudim_watermeter.coordinator import (
+            VsChrudimCoordinator,
+        )
+        from custom_components.vschrudim_watermeter.models import MeterReading
+
+        known = (MeterReading(datetime(2026, 9, 7, 10), 100.0),)
+        coordinator = object.__new__(VsChrudimCoordinator)
+        coordinator._api_lock = asyncio.Lock()
+        coordinator.client = SimpleNamespace(
+            async_get_data=AsyncMock(side_effect=RuntimeError("private payload"))
+        )
+        coordinator.place = SimpleNamespace()
+        coordinator.entry = SimpleNamespace(
+            options={"failure_threshold": 3, "retry_delay": 30}
+        )
+        coordinator._known_readings = known
+        coordinator._consecutive_failures = 0
+        coordinator._set_source_status = AsyncMock()
+        coordinator._async_record_download_attempt = AsyncMock()
+
+        with self.assertRaisesRegex(UpdateFailed, "Unexpected VSChrudim"):
+            asyncio.run(coordinator._async_update_data())
+
+        self.assertEqual(coordinator._known_readings, known)
+        self.assertEqual(
+            coordinator.last_attempt_error, "Unexpected internal update error"
+        )
+        coordinator._async_record_download_attempt.assert_awaited_once()
+
     def test_retry_history_download_refreshes_before_starting_backfill(self):
         from custom_components.vschrudim_watermeter.coordinator import (
             VsChrudimCoordinator,
@@ -566,7 +610,12 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
                 started,
                 0.0,
                 result="success",
-                metadata=DownloadMetadata(source="html_table", html_table_detected=True),
+                metadata=DownloadMetadata(
+                    source="html_table",
+                    html_table_detected=True,
+                    portal_page_features=("html_table", "webforms_form"),
+                    reading_quality_flags=("meter_state_decreased",),
+                ),
                 readings=(MeterReading(datetime(2026, 1, 1, 9), 10.0),),
                 missing_hourly_readings=0,
             )
@@ -581,6 +630,10 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
         coordinator = asyncio.run(run_test())
         self.assertEqual(len(coordinator.download_attempt_history), 2)
         self.assertEqual(coordinator.download_attempt_history[0].source, "html_table")
+        self.assertEqual(
+            coordinator.download_attempt_history[0].portal_page_features,
+            ("html_table", "webforms_form"),
+        )
         self.assertEqual(coordinator.download_attempt_history[1].result, "failed")
         self.assertNotIn("secret", coordinator.download_attempt_history[1].error or "")
 
@@ -613,6 +666,8 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
             last_download_source="unknown",
             last_download_latest_timestamp=None,
             last_download_reading_count=0,
+            last_portal_page_features=("html_table",),
+            last_reading_quality_flags=("meter_state_decreased",),
             last_duplicate_readings_merged=0,
             last_missing_readings_recovered=0,
             current_missing_hourly_readings=0,
@@ -651,3 +706,7 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
             diagnostics["last_attempt_error"], "password=credential-token-73921"
         )
         self.assertNotEqual(history[0]["error"], "password=credential-token-73921")
+        self.assertEqual(diagnostics["last_portal_page_features"], ["html_table"])
+        self.assertEqual(
+            diagnostics["last_reading_quality_flags"], ["meter_state_decreased"]
+        )
