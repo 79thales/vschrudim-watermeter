@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.9 - 2026-09-08
+
+- Fix the Energy-statistics rebuild failure caused by an unsupported cost
+  verification argument.
+- Treat a lower register value as a new meter baseline instead of attributing
+  the complete replacement-meter state to one hour of consumption.
+- Serialize clear and rebuild maintenance operations to prevent concurrent
+  destructive Recorder changes.
+- Add a configuration-category device button for explicitly rebuilding Energy
+  statistics after the complete source preflight.
+- Add regression coverage for rebuild verification, meter replacement and the
+  new maintenance button.
+
 ## 0.4.8 - 2026-09-07
 
 - Support verified ASP.NET WebForms `__doPostBack` export LinkButtons while

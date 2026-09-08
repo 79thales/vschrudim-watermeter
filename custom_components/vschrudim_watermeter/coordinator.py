@@ -92,6 +92,7 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
         self._api_lock = asyncio.Lock()
         self._meter_entity_id: str | None = None
         self._cost_entity_id: str | None = None
+        self._statistics_operation_lock = asyncio.Lock()
         self._statistics_writes_paused = False
         self.statistics_ready = True
         self.last_attempt_at: datetime | None = None
@@ -441,14 +442,10 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
         """Delete Energy statistics only after a caller explicitly confirms."""
         if confirm is not True:
             raise HomeAssistantError("confirm=true is required to clear statistics")
-        self._statistics_writes_paused = True
-        self.statistics_ready = False
-        try:
+        async with self._statistics_operation_lock:
+            self._statistics_writes_paused = True
+            self.statistics_ready = False
             await self._async_clear_energy_statistics()
-        except Exception:
-            # Keep the writer paused after a partial/destructive operation. A
-            # validated rebuild is the safe way to resume it.
-            raise
 
     async def _async_fetch_complete_source_data(self) -> tuple[MeterReading, ...]:
         """Fetch and validate every available portal hour before a rebuild."""
@@ -538,7 +535,6 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
                 price_per_m3=float(
                     self.entry.options.get(CONF_PRICE_PER_M3, DEFAULT_PRICE_PER_M3)
                 ),
-                currency="CZK",
                 local_tz=local_tz,
                 now=now,
             ),
@@ -589,37 +585,43 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
         """Safely replace Energy statistics only after complete source validation."""
         if confirm is not True:
             raise HomeAssistantError("confirm=true is required to rebuild statistics")
-        # This deliberate preflight happens before the destructive clear. If
-        # the portal is unavailable or its data is malformed, existing Energy
-        # statistics remain untouched.
-        readings = await self._async_fetch_complete_source_data()
-        self._statistics_writes_paused = True
-        self.statistics_ready = False
-        await self._async_clear_energy_statistics()
-        local_tz = dt_util.get_time_zone(self.hass.config.time_zone)
-        now = dt_util.now()
-        async_add_external_meter_statistics(
-            self.hass,
-            statistic_id=self.consumption_statistic_id,
-            readings=readings,
-            local_tz=local_tz,
-            now=now,
-        )
-        async_add_external_cost_statistics(
-            self.hass,
-            statistic_id=self.cost_statistic_id,
-            readings=readings,
-            price_per_m3=float(
-                self.entry.options.get(CONF_PRICE_PER_M3, DEFAULT_PRICE_PER_M3)
-            ),
-            currency="CZK",
-            local_tz=local_tz,
-            now=now,
-        )
-        await self._async_verify_energy_statistics(readings)
-        self._known_readings = merge_readings(self._known_readings, readings)
-        self.statistics_ready = True
-        self._statistics_writes_paused = False
+        async with self._statistics_operation_lock:
+            # This deliberate preflight happens before the destructive clear.
+            # If the portal is unavailable or its data is malformed, existing
+            # Energy statistics remain untouched.
+            readings = await self._async_fetch_complete_source_data()
+            self._statistics_writes_paused = True
+            self.statistics_ready = False
+            await self._async_clear_energy_statistics()
+            local_tz = dt_util.get_time_zone(self.hass.config.time_zone)
+            now = dt_util.now()
+            async_add_external_meter_statistics(
+                self.hass,
+                statistic_id=self.consumption_statistic_id,
+                readings=readings,
+                local_tz=local_tz,
+                now=now,
+            )
+            async_add_external_cost_statistics(
+                self.hass,
+                statistic_id=self.cost_statistic_id,
+                readings=readings,
+                price_per_m3=float(
+                    self.entry.options.get(CONF_PRICE_PER_M3, DEFAULT_PRICE_PER_M3)
+                ),
+                currency="CZK",
+                local_tz=local_tz,
+                now=now,
+            )
+            await self._async_verify_energy_statistics(readings)
+            self._known_readings = merge_readings(self._known_readings, readings)
+            self.statistics_ready = True
+            self._statistics_writes_paused = False
+
+    @property
+    def statistics_operation_running(self) -> bool:
+        """Return whether a clear or rebuild operation is in progress."""
+        return self._statistics_operation_lock.locked()
 
     def async_start_history_backfill(self, resume_only: bool = False) -> bool:
         """Start or resume the bounded three-year history scan."""

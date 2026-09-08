@@ -67,6 +67,11 @@ data:
   confirm: true
 ```
 
+Starting with version 0.4.9, the same explicitly confirmed rebuild can also be
+started from the water-meter device page using **Rebuild Energy statistics**
+under **Configuration**. The button performs the safe source preflight and
+calls the confirmed rebuild. Direct statistics clearing remains service-only.
+
 The service first downloads and validates the complete available portal
 history. Only then does it clear the legacy `sensor.*` statistics and the
 integration-owned statistics, import a chronological replacement, verify its

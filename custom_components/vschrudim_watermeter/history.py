@@ -62,11 +62,12 @@ def meter_statistics(
         if start >= current_hour_utc:
             continue
         if previous_state is not None:
-            # A physical register can reset after replacement. Do not emit a
-            # decreasing Energy sum; a reset's first non-negative register
-            # value becomes the new accumulated consumption.
+            # A physical register can reset after replacement. The first
+            # reading of the new register is a new baseline, not consumption
+            # that occurred during this single hour.
             delta = reading.meter_state_m3 - previous_state
-            running_sum += max(0.0, delta if delta >= 0 else reading.meter_state_m3)
+            if delta >= 0:
+                running_sum += delta
         previous_state = reading.meter_state_m3
         result[start] = StatisticData(
             start=start,

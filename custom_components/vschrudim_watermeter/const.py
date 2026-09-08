@@ -2,7 +2,7 @@
 from datetime import timedelta
 
 DOMAIN = "vschrudim_watermeter"
-PLATFORMS = ["sensor"]
+PLATFORMS = ["sensor", "button"]
 CONF_USERNAME = "username"
 CONF_PASSWORD = "password"
 CONF_PLACE = "place"

@@ -65,6 +65,11 @@ data:
   confirm: true
 ```
 
+Od verze 0.4.9 lze stejnou potvrzenou obnovu spustit také na stránce zařízení
+vodoměru tlačítkem **Obnovit statistiky Energie** v části **Konfigurace**.
+Tlačítko provede bezpečný předběžný download a volá obnovu s výslovným
+potvrzením. Samostatné mazání statistik zůstává dostupné pouze jako služba.
+
 Služba nejdříve stáhne a ověří celou dostupnou historii portálu. Teprve poté
 vymaže staré statistiky `sensor.*` a integrační statistiky, chronologicky
 naimportuje náhradu, ověří poslední monotónní součet a obnoví běžné zápisy.

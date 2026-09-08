@@ -7,7 +7,7 @@ import asyncio
 from datetime import datetime
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from zoneinfo import ZoneInfo
 
 HOME_ASSISTANT_INSTALLED = importlib.util.find_spec("homeassistant") is not None
@@ -20,6 +20,7 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
             "custom_components.vschrudim_watermeter",
             "custom_components.vschrudim_watermeter.api",
             "custom_components.vschrudim_watermeter.attempts",
+            "custom_components.vschrudim_watermeter.button",
             "custom_components.vschrudim_watermeter.calculation",
             "custom_components.vschrudim_watermeter.config_flow",
             "custom_components.vschrudim_watermeter.coordinator",
@@ -100,6 +101,108 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
         metadata = add_external.call_args.args[1]
         self.assertEqual(metadata["statistic_id"], "vschrudim_watermeter:test_water_consumption")
         self.assertEqual(metadata["source"], "vschrudim_watermeter")
+
+    def test_meter_reset_starts_a_new_baseline_without_a_consumption_spike(self):
+        from custom_components.vschrudim_watermeter.history import meter_statistics
+        from custom_components.vschrudim_watermeter.models import MeterReading
+
+        rows = meter_statistics(
+            (
+                MeterReading(datetime(2026, 1, 1, 10), 100.0),
+                MeterReading(datetime(2026, 1, 1, 11), 100.5),
+                MeterReading(datetime(2026, 1, 1, 12), 29.69),
+                MeterReading(datetime(2026, 1, 1, 13), 29.89),
+            ),
+            local_tz=ZoneInfo("Europe/Prague"),
+            now=datetime(2026, 1, 1, 14, tzinfo=ZoneInfo("Europe/Prague")),
+        )
+
+        self.assertEqual([row["sum"] for row in rows], [0.0, 0.5, 0.5, 0.7])
+
+    def test_rebuild_verification_builds_both_supported_statistic_series(self):
+        from custom_components.vschrudim_watermeter import coordinator as module
+        from custom_components.vschrudim_watermeter.coordinator import (
+            VsChrudimCoordinator,
+        )
+        from custom_components.vschrudim_watermeter.history import (
+            cost_statistics,
+            meter_statistics,
+        )
+        from custom_components.vschrudim_watermeter.models import MeterReading
+
+        now = datetime(2026, 1, 1, 14, tzinfo=ZoneInfo("Europe/Prague"))
+        readings = (
+            MeterReading(datetime(2026, 1, 1, 10), 100.0),
+            MeterReading(datetime(2026, 1, 1, 11), 100.5),
+        )
+        local_tz = ZoneInfo("Europe/Prague")
+        coordinator = object.__new__(VsChrudimCoordinator)
+        coordinator.hass = SimpleNamespace(
+            config=SimpleNamespace(time_zone="Europe/Prague")
+        )
+        coordinator.entry = SimpleNamespace(
+            entry_id="TEST", options={"price_per_m3": 120.0}
+        )
+        expected = {
+            coordinator.consumption_statistic_id: meter_statistics(
+                readings, local_tz=local_tz, now=now
+            ),
+            coordinator.cost_statistic_id: cost_statistics(
+                readings, price_per_m3=120.0, local_tz=local_tz, now=now
+            ),
+        }
+
+        class Recorder:
+            async def async_add_executor_job(self, target, *args):
+                return target(*args)
+
+        def last_statistics(*args):
+            statistic_id = args[2]
+            return {
+                statistic_id: [
+                    {"start": expected[statistic_id][-1]["start"].timestamp()}
+                ]
+            }
+
+        def period_statistics(*args):
+            statistic_id = next(iter(args[3]))
+            return {
+                statistic_id: [
+                    {"sum": row["sum"]} for row in expected[statistic_id]
+                ]
+            }
+
+        with (
+            patch.object(module.dt_util, "now", return_value=now),
+            patch.object(module, "get_instance", return_value=Recorder()),
+            patch.object(module, "get_last_statistics", side_effect=last_statistics),
+            patch.object(
+                module,
+                "statistics_during_period",
+                side_effect=period_statistics,
+            ),
+        ):
+            asyncio.run(coordinator._async_verify_energy_statistics(readings))
+
+    def test_rebuild_button_is_explicit_config_action(self):
+        from homeassistant.const import EntityCategory
+        from custom_components.vschrudim_watermeter.button import (
+            RebuildEnergyStatisticsButton,
+        )
+
+        coordinator = SimpleNamespace(
+            place=SimpleNamespace(identifier="test", address="Test meter"),
+            statistics_operation_running=False,
+            async_rebuild_energy_statistics=AsyncMock(),
+        )
+        button = RebuildEnergyStatisticsButton(coordinator)
+
+        self.assertEqual(button.entity_category, EntityCategory.CONFIG)
+        self.assertTrue(button.available)
+        asyncio.run(button.async_press())
+        coordinator.async_rebuild_energy_statistics.assert_awaited_once_with(
+            confirm=True
+        )
 
     def test_download_attempt_records_success_and_failure(self):
         from custom_components.vschrudim_watermeter.attempts import DownloadAttempt
