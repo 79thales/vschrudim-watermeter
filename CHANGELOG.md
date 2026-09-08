@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.10 - 2026-09-08
+
+- Reuse the portal's already selected reporting context when the consumption-
+  place grid is temporarily absent, but only after verifying that its hidden
+  identifiers match the configured place.
+- Classify an unverified missing place list separately instead of reporting
+  the misleading low-level grid-parser error.
+- Add regression coverage for the verified reporting fallback and prevention
+  of cross-place data reuse.
+
 ## 0.4.9 - 2026-09-08
 
 - Fix the Energy-statistics rebuild failure caused by an unsupported cost

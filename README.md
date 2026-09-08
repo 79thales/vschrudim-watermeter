@@ -112,6 +112,12 @@ Every successful download is merged with readings already seen during the curren
 
 VS Chrudim supplies an authenticated ASP.NET WebForms website, not a documented public API. The client follows fields, menu links, WebForms postbacks and CSV-export links found in the authenticated HTML, and fails safely when the expected structure is absent. It does not guess REST endpoints or run WebDownloader.
 
+If the portal skips its consumption-place list and opens a previously selected
+reporting/detail context directly, the integration continues through that
+context only after its portal identifiers match the configured consumption
+place. An absent, unverified grid is never treated as permission to use another
+place's data.
+
 The portal's current custom-range controls are required for historical backfill.
 For measured-state downloads the integration supports verified direct CSV
 links, documented WebForms submit controls, verified `__doPostBack` export

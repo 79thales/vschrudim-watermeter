@@ -116,6 +116,80 @@ class ApiParserTests(unittest.TestCase):
         )
 
 class MeasuredStatesNavigationTests(unittest.IsolatedAsyncioTestCase):
+    @staticmethod
+    def _place():
+        return api.ConsumptionPlace("123", "456", "Example Address", "C-1", "v1")
+
+    def test_recognizes_verified_selected_place_context(self):
+        html = """
+        <form>
+          <input type="hidden" name="ctl00$Detail$edCpId" value="123">
+          <input type="hidden" name="ctl00$Detail$edCpEvNum" value="456">
+        </form>
+        """
+
+        self.assertTrue(api._matches_selected_consumption_place(html, self._place()))
+
+    def test_rejects_selected_context_for_another_place(self):
+        html = """
+        <form>
+          <input type="hidden" name="ctl00$Detail$edCpId" value="999">
+          <input type="hidden" name="ctl00$Detail$edCpEvNum" value="888">
+        </form>
+        """
+
+        self.assertFalse(api._matches_selected_consumption_place(html, self._place()))
+
+    async def test_uses_verified_reporting_context_when_place_grid_is_absent(self):
+        client = api.VsChrudimClient(object(), "user", "password")
+        client._logged_in = True
+        calls = []
+        detail_html = """
+        <form>
+          <input type="hidden" name="ctl00$Detail$edCpId" value="123">
+          <input type="hidden" name="ctl00$Detail$edCpEvNum" value="456">
+        </form>
+        """
+        readings_html = """
+        <input id="ctl00_GraphFilter1_btnRenew" value="Aktualizovat">
+        <table>
+          <tr><th>Měřidlo</th><th>Čas</th><th>Stav</th></tr>
+          <tr><td>A</td><td>01.01.2026 00:00</td><td>10,250 m³</td></tr>
+        </table>
+        """
+
+        async def request(method, url, data=None):
+            calls.append((method, url, data))
+            if url == api.PLACES_URL:
+                return detail_html, "https://zakaznik.vschrudim.cz/detail"
+            if url == api.READINGS_URL:
+                return readings_html, url
+            self.fail(f"Unexpected request: {method} {url}")
+
+        client._request_text = request
+        result = await client.async_get_data(self._place())
+
+        self.assertEqual(len(result.readings), 1)
+        self.assertEqual(result.readings[0].meter_state_m3, 10.25)
+        self.assertEqual(result.download_metadata.source, "html_table")
+        self.assertEqual(
+            [(method, url) for method, url, _ in calls],
+            [("GET", api.PLACES_URL), ("GET", api.READINGS_URL)],
+        )
+
+    async def test_missing_grid_does_not_reuse_unverified_place_context(self):
+        client = api.VsChrudimClient(object(), "user", "password")
+
+        with self.assertRaisesRegex(
+            api.VsChrudimProtocolError,
+            "did not confirm the configured place",
+        ):
+            await client._select_place(
+                "<html>portal detail without identity controls</html>",
+                "https://zakaznik.vschrudim.cz/detail",
+                self._place(),
+            )
+
     def test_empty_range_before_earliest_reading_finishes_history_scan(self):
         error = api.VsChrudimProtocolError(
             "The portal exposed no recognizable CSV link or WebForms export control"

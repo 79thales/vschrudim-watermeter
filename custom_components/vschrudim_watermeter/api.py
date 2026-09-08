@@ -448,6 +448,30 @@ def _parse_consumption_place_grid(
         raise VsChrudimProtocolError("Consumption-place grid was not found")
     return parser
 
+
+def _matches_selected_consumption_place(
+    html: str,
+    place: ConsumptionPlace,
+) -> bool:
+    """Verify the consumption-place context stored by the portal session.
+
+    The working WebDownloader accepts a missing place grid only when the
+    rendered detail page exposes ``edCpId``/``edCpEvNum`` controls matching
+    the requested place. This prevents a remembered session context from
+    silently returning readings for another customer place.
+    """
+    form = _parse_form(html)
+    evidence_name = _control_ending(form.inputs, "edCpId")
+    technical_name = _control_ending(form.inputs, "edCpEvNum")
+    evidence = re.sub(r"\D", "", form.inputs.get(evidence_name, ""))
+    technical = re.sub(r"\D", "", form.inputs.get(technical_name, ""))
+    expected_evidence = re.sub(r"\D", "", place.evidence_number)
+    expected_technical = re.sub(r"\D", "", place.technical_number)
+    return bool(
+        (expected_evidence and evidence == expected_evidence)
+        or (expected_technical and technical == expected_technical)
+    )
+
 def _number(value: str) -> float | None:
     try:
         return float(value.strip().replace(" ", "").replace(",", "."))
@@ -722,7 +746,21 @@ class VsChrudimClient:
             await self.async_login()
 
     async def _select_place(self, html: str, url: str, place: ConsumptionPlace) -> tuple[str, str]:
-        grid = _parse_consumption_place_grid(html)
+        if self._looks_like_login(html):
+            self._logged_in = False
+            raise VsChrudimAuthError("Authenticated session expired")
+        try:
+            grid = _parse_consumption_place_grid(html)
+        except VsChrudimProtocolError:
+            # The portal sometimes redirects ConsumptionPlaceList.aspx to the
+            # already selected detail/reporting context. Reuse it only after
+            # verifying both the portal control and the configured place.
+            if _matches_selected_consumption_place(html, place):
+                return html, url
+            raise VsChrudimProtocolError(
+                "The consumption-place list was unavailable and the portal "
+                "did not confirm the configured place"
+            ) from None
         expected_evidence = re.sub(r"\D", "", place.evidence_number)
         expected_technical = re.sub(r"\D", "", place.technical_number)
         for row_index, (cells, postback) in enumerate(grid.rows):
