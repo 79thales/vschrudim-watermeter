@@ -57,8 +57,12 @@ from .recovery import count_duplicate_readings, find_missing_hours, merge_readin
 _LOGGER = logging.getLogger(__name__)
 _HISTORY_STORE_VERSION = 1
 _ATTEMPT_STORE_VERSION = 1
+_NOTIFICATION_STORE_VERSION = 1
 _BACKFILL_REQUEST_DELAY = 2
 _STATISTICS_OPERATION_TIMEOUT = 30
+_SOURCE_STATUSES = frozenset(
+    {"unknown", "ok", "delayed_data", "authentication_required", "error"}
+)
 
 
 def _stored_date(value: object) -> date | None:
@@ -135,10 +139,16 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
             _ATTEMPT_STORE_VERSION,
             f"{DOMAIN}.download_attempts.{entry.entry_id}",
         )
+        self._notification_store: Store[dict[str, object]] = Store(
+            hass,
+            _NOTIFICATION_STORE_VERSION,
+            f"{DOMAIN}.notification_state.{entry.entry_id}",
+        )
         self.download_attempt_history: list[DownloadAttempt] = []
 
     async def async_initialize(self) -> None:
         """Restore non-sensitive history progress after restart."""
+        await self._async_load_notification_state()
         attempts = await self._attempt_store.async_load()
         self.download_attempt_history = load_attempt_history(attempts)
         stored = await self._history_store.async_load()
@@ -179,6 +189,45 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
         error = stored.get("error")
         self.history_backfill_error = str(error) if error else None
 
+    async def _async_load_notification_state(self) -> None:
+        """Restore only the safe notification-transition state."""
+        try:
+            stored = await self._notification_store.async_load()
+        except Exception:  # pragma: no cover - storage failures are environment-specific
+            # Notification deduplication must never stop the actual portal
+            # update. The next successful state transition will establish a
+            # fresh, safe transition state.
+            _LOGGER.warning("Could not restore notification transition state")
+            return
+        if not isinstance(stored, dict):
+            return
+        source_status = stored.get("source_status")
+        if isinstance(source_status, str) and source_status in _SOURCE_STATUSES:
+            self.source_status = source_status
+        source_problem_active = stored.get("source_problem_notification_active")
+        if isinstance(source_problem_active, bool):
+            self._source_problem_notification_active = source_problem_active
+        missing_problem_active = stored.get("missing_problem_notification_active")
+        if isinstance(missing_problem_active, bool):
+            self._missing_problem_notification_active = missing_problem_active
+
+    async def _async_save_notification_state(self) -> None:
+        """Persist transition flags without customer or portal data."""
+        try:
+            await self._notification_store.async_save(
+                {
+                    "source_status": self.source_status,
+                    "source_problem_notification_active": (
+                        self._source_problem_notification_active
+                    ),
+                    "missing_problem_notification_active": (
+                        self._missing_problem_notification_active
+                    ),
+                }
+            )
+        except Exception:  # pragma: no cover - storage failures are environment-specific
+            _LOGGER.warning("Could not persist notification transition state")
+
     @property
     def _unavailable_notification_id(self) -> str:
         return f"{DOMAIN}_{self.entry.entry_id}_unavailable"
@@ -218,7 +267,7 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
             return "delayed_data"
         return "ok"
 
-    def _set_source_status(
+    async def _set_source_status(
         self,
         status: str,
         *,
@@ -227,6 +276,7 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
     ) -> None:
         """Update source state and notify once per problem-state transition."""
         previous = self.source_status
+        previous_problem_active = self._source_problem_notification_active
         self.source_status = status
 
         if status in {"authentication_required", "error"}:
@@ -254,6 +304,11 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
                     notification_id=self._unavailable_notification_id,
                 )
                 self._source_problem_notification_active = True
+            if (
+                previous != self.source_status
+                or previous_problem_active != self._source_problem_notification_active
+            ):
+                await self._async_save_notification_state()
             return
 
         async_dismiss(self.hass, self._unavailable_notification_id)
@@ -273,11 +328,17 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
             )
         if status == "ok":
             self._source_problem_notification_active = False
+        if (
+            previous != self.source_status
+            or previous_problem_active != self._source_problem_notification_active
+        ):
+            await self._async_save_notification_state()
 
-    def _handle_missing_hours_notification(
+    async def _handle_missing_hours_notification(
         self, missing: tuple[datetime, ...], recovery_attempts: int
     ) -> None:
         """Notify only when missing readings appear or are fully recovered."""
+        previous_problem_active = self._missing_problem_notification_active
         notify_missing = self.entry.options.get(
             CONF_NOTIFY_MISSING, DEFAULT_NOTIFY_MISSING
         )
@@ -297,6 +358,8 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
                     notification_id=self._missing_notification_id,
                 )
                 self._missing_problem_notification_active = True
+            if previous_problem_active != self._missing_problem_notification_active:
+                await self._async_save_notification_state()
             return
 
         async_dismiss(self.hass, self._missing_notification_id)
@@ -308,6 +371,8 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
                 notification_id=self._missing_recovered_notification_id,
             )
         self._missing_problem_notification_active = False
+        if previous_problem_active != self._missing_problem_notification_active:
+            await self._async_save_notification_state()
 
     async def _async_update_data(self) -> WaterMeterData:
         started_at = dt_util.now()
@@ -322,7 +387,14 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
                 self._known_readings, data.readings
             )
             merged = merge_readings(self._known_readings, data.readings)
-            initially_missing = find_missing_hours(merged)
+            # A normal measured-states response covers only the portal's
+            # current reporting range. `_known_readings` additionally contains
+            # historical backfill data, so looking for gaps in the merged
+            # series would turn an old historical gap into a false current
+            # outage notification. Recovery retries can only repair the range
+            # returned by this current download.
+            current_readings = data.readings
+            initially_missing = find_missing_hours(current_readings)
             missing = initially_missing
             attempts = 0
             maximum_attempts = int(self.entry.options.get(CONF_MISSING_RETRY_ATTEMPTS, DEFAULT_MISSING_RETRY_ATTEMPTS))
@@ -336,7 +408,8 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
                     merged, retry_data.readings
                 )
                 merged = merge_readings(merged, retry_data.readings)
-                missing = find_missing_hours(merged)
+                current_readings = merge_readings(current_readings, retry_data.readings)
+                missing = find_missing_hours(current_readings)
             self._known_readings = merged
             self._consecutive_failures = 0
             self.last_download_source = data.download_metadata.source
@@ -361,8 +434,10 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
             self.last_success_at = dt_util.now()
             self.last_attempt_result = "success"
             self.last_attempt_error = None
-            self._set_source_status(self._source_status_for_readings(data.readings))
-            self._handle_missing_hours_notification(missing, attempts)
+            await self._set_source_status(
+                self._source_status_for_readings(data.readings)
+            )
+            await self._handle_missing_hours_notification(missing, attempts)
             await self._async_import_readings(merged)
             await self._async_record_download_attempt(
                 started_at,
@@ -382,7 +457,7 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
         except VsChrudimAuthError as err:
             self.last_attempt_result = "authentication_failed"
             self.last_attempt_error = "Authentication is no longer valid"
-            self._set_source_status(
+            await self._set_source_status(
                 "authentication_required", error=err, notify_problem=True
             )
             await self._async_record_download_attempt(
@@ -404,7 +479,7 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
             )
             self._consecutive_failures += 1
             threshold = int(self.entry.options.get(CONF_FAILURE_THRESHOLD, DEFAULT_FAILURE_THRESHOLD))
-            self._set_source_status(
+            await self._set_source_status(
                 "error",
                 error=err,
                 notify_problem=self._consecutive_failures >= threshold,
@@ -773,6 +848,21 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
             and not self._history_backfill_task.done()
         )
 
+    async def async_shutdown(self) -> None:
+        """Checkpoint and stop history work before an integration unload."""
+        task = self._history_backfill_task
+        if not task or task.done():
+            return
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        except Exception:  # pragma: no cover - defensive unload protection
+            _LOGGER.exception("History backfill stopped with an unload error")
+        finally:
+            self._history_backfill_task = None
+
     async def async_test_download(self) -> None:
         """Validate one current portal download without importing any data.
 
@@ -802,18 +892,22 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
             self.current_missing_hourly_readings = len(missing)
             self.oldest_missing_hour = missing[0] if missing else None
             self.last_success_at = dt_util.now()
-            self._set_source_status(self._source_status_for_readings(data.readings))
+            await self._set_source_status(
+                self._source_status_for_readings(data.readings)
+            )
         except VsChrudimAuthError as err:
             self.last_test_download_result = "authentication_failed"
             self.last_test_download_error = "Authentication is no longer valid"
-            self._set_source_status(
+            await self._set_source_status(
                 "authentication_required", error=err, notify_problem=True
             )
             raise ConfigEntryAuthFailed from err
         except VsChrudimError as err:
             self.last_test_download_result = "failed"
             self.last_test_download_error = sanitize_error_message(err)
-            self._set_source_status("error", error=err, notify_problem=True)
+            await self._set_source_status(
+                "error", error=err, notify_problem=True
+            )
             raise HomeAssistantError(
                 self.last_test_download_error or "The portal download test failed"
             ) from err

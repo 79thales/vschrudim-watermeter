@@ -35,4 +35,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: VsChrudimConfigEntry) ->
 
 async def async_unload_entry(hass: HomeAssistant, entry: VsChrudimConfigEntry) -> bool:
     """Unload platforms; HA detaches the entry-owned HTTP session."""
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unloaded:
+        await entry.runtime_data.async_shutdown()
+    return unloaded

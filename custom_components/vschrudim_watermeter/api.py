@@ -6,6 +6,8 @@ portal; it does not invent undocumented endpoints or persist session cookies.
 """
 from __future__ import annotations
 
+import asyncio
+
 from dataclasses import dataclass, replace
 from datetime import date, datetime
 from html import unescape
@@ -29,6 +31,8 @@ from .models import (
 
 _DATE_FORMATS: Final = ("%d.%m.%Y %H:%M", "%d.%m.%Y %H:%M:%S", "%d.%m.%Y")
 _ResultT = TypeVar("_ResultT")
+_REQUEST_TIMEOUT_SECONDS: Final = 45
+_MAX_RESPONSE_BYTES: Final = 12 * 1024 * 1024
 
 class VsChrudimError(Exception):
     """Base portal error."""
@@ -1024,14 +1028,45 @@ class VsChrudimClient:
         value = html.casefold()
         return "password" in value and ("login" in value or "přihlás" in value)
 
+    @staticmethod
+    async def _read_bounded_response_text(response: aiohttp.ClientResponse) -> str:
+        """Read a normal portal response without accepting unbounded content."""
+        content_length = response.content_length
+        if content_length is not None and content_length > _MAX_RESPONSE_BYTES:
+            raise VsChrudimProtocolError("Portal response exceeded the safe size limit")
+        body = await response.content.read(_MAX_RESPONSE_BYTES + 1)
+        if len(body) > _MAX_RESPONSE_BYTES:
+            raise VsChrudimProtocolError("Portal response exceeded the safe size limit")
+        try:
+            encoding = response.charset or response.get_encoding()
+        except (LookupError, RuntimeError):
+            encoding = "utf-8"
+        try:
+            return body.decode(encoding or "utf-8", errors="replace")
+        except LookupError:
+            # A malformed charset declaration must not turn a valid portal
+            # response into an unhandled decoder error.
+            return body.decode("utf-8", errors="replace")
+
     async def _request_text(self, method: str, url: str, data: dict[str, str] | None = None) -> tuple[str, str]:
         try:
-            async with self._session.request(method, url, data=data, allow_redirects=True) as response:
-                text = await response.text()
+            timeout = aiohttp.ClientTimeout(total=_REQUEST_TIMEOUT_SECONDS)
+            async with self._session.request(
+                method,
+                url,
+                data=data,
+                allow_redirects=True,
+                timeout=timeout,
+            ) as response:
                 if response.status >= 500:
                     raise VsChrudimConnectionError(f"Portal returned HTTP {response.status}")
                 if response.status >= 400:
                     raise VsChrudimProtocolError(f"Portal returned HTTP {response.status}")
+                text = await self._read_bounded_response_text(response)
                 return text, str(response.url)
+        except asyncio.TimeoutError as err:
+            raise VsChrudimConnectionError(
+                "VS Chrudim portal request timed out"
+            ) from err
         except aiohttp.ClientError as err:
             raise VsChrudimConnectionError("Unable to connect to VS Chrudim portal") from err

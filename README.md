@@ -140,7 +140,12 @@ consecutive failed updates, reports an authentication problem immediately, and
 creates one recovery notification after either problem returns to normal.
 Authentication errors use the standard reauthentication flow.
 
-Every successful download is merged with readings already seen during the current runtime. Internal hourly gaps trigger up to two repeated downloads with a configurable delay. Corrected portal values replace the older value with the same timestamp. If gaps remain after those attempts, one persistent notification lists their count and a short timestamp preview; a recovery notification is created once the readings are filled. Czech spring DST's nonexistent 02:00 hour is not treated as missing. All thresholds, notifications, attempt counts and delays can be changed under **Reconfigure**.
+Every successful download is merged with readings already seen during the current runtime. Internal hourly gaps in the **current portal response range** trigger up to two repeated downloads with a configurable delay. Historical gaps discovered by the separate backfill are not reported as a current-download outage, because a normal portal request cannot repair them. Corrected portal values replace the older value with the same timestamp. If current-range gaps remain after those attempts, one persistent notification lists their count and a short timestamp preview; a recovery notification is created once the readings are filled. Czech spring DST's nonexistent 02:00 hour is not treated as missing. All thresholds, notifications, attempt counts and delays can be changed under **Reconfigure**.
+
+Notification transition flags survive a Home Assistant restart, so an unchanged
+problem does not create duplicate alerts. The state contains no portal or
+customer data, and its persistence is best effort: a storage failure never
+prevents an otherwise valid portal update.
 
 ## Portal compatibility
 
@@ -159,6 +164,12 @@ LinkButtons, and a deterministic table fallback with Czech date and meter-state
 headings. It never runs arbitrary JavaScript. If the provider changes or
 removes all usable structures, normal polling remains isolated from the failed
 backfill and the diagnostic status reports the protocol error.
+
+Each portal HTTP request has a 45-second deadline and accepts at most 12 MiB of
+response data. These guards fail a malformed or stalled response safely without
+changing normal polling, backfill or Energy-statistics processing. A running
+backfill is cancelled and checkpoints its progress when the integration is
+unloaded, then resumes from that checkpoint after setup.
 
 ## Security
 

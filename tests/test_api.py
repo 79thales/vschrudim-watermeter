@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 import types
 import unittest
+from unittest.mock import patch
 
 # Parser tests do not make HTTP calls; provide the minimal runtime module when
 # executing outside Home Assistant's dependency environment.
@@ -139,6 +140,74 @@ class MeasuredStatesNavigationTests(unittest.IsolatedAsyncioTestCase):
         """
 
         self.assertFalse(api._matches_selected_consumption_place(html, self._place()))
+
+    async def test_bounded_response_reader_preserves_normal_portal_text(self):
+        class Content:
+            async def read(self, maximum):
+                self.maximum = maximum
+                return "Měřidlo;Čas;Stav".encode()
+
+        class Response:
+            content_length = len("Měřidlo;Čas;Stav".encode())
+            charset = "utf-8"
+            content = Content()
+
+            @staticmethod
+            def get_encoding():
+                return "utf-8"
+
+        text = await api.VsChrudimClient._read_bounded_response_text(Response())
+
+        self.assertEqual(text, "Měřidlo;Čas;Stav")
+        self.assertEqual(Response.content.maximum, api._MAX_RESPONSE_BYTES + 1)
+
+    async def test_bounded_response_reader_rejects_oversized_content(self):
+        class Content:
+            async def read(self, maximum):
+                self.fail("Oversized response must be rejected before reading")
+
+            @staticmethod
+            def fail(message):
+                raise AssertionError(message)
+
+        class Response:
+            content_length = api._MAX_RESPONSE_BYTES + 1
+            content = Content()
+
+        with self.assertRaisesRegex(api.VsChrudimProtocolError, "size limit"):
+            await api.VsChrudimClient._read_bounded_response_text(Response())
+
+    async def test_bounded_response_reader_falls_back_from_invalid_charset(self):
+        class Content:
+            async def read(self, maximum):
+                return "Měřidlo;Čas;Stav".encode()
+
+        class Response:
+            content_length = len("Měřidlo;Čas;Stav".encode())
+            charset = "not-a-real-charset"
+            content = Content()
+
+        text = await api.VsChrudimClient._read_bounded_response_text(Response())
+
+        self.assertEqual(text, "Měřidlo;Čas;Stav")
+
+    async def test_request_timeout_is_a_connection_error(self):
+        class Request:
+            async def __aenter__(self):
+                raise TimeoutError
+
+            async def __aexit__(self, *args):
+                return False
+
+        class Session:
+            @staticmethod
+            def request(*args, **kwargs):
+                return Request()
+
+        client = api.VsChrudimClient(Session(), "user", "password")
+        with patch.object(api.aiohttp, "ClientTimeout", create=True):
+            with self.assertRaisesRegex(api.VsChrudimConnectionError, "timed out"):
+                await client._request_text("GET", "https://example.invalid/")
 
     async def test_uses_verified_reporting_context_when_place_grid_is_absent(self):
         client = api.VsChrudimClient(object(), "user", "password")

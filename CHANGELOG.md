@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.16 - 2026-09-08
+
+- Prevent historical backfill gaps from being reported as missing readings in
+  the portal's current download range.
+- Preserve notification transition state across a Home Assistant restart,
+  while treating its storage as best effort so it cannot block a normal update.
+- Bound each portal response to 12 MiB and each request to 45 seconds, and
+  checkpoint a running history backfill before integration unload.
+- Keep normal polling, historical reconciliation, live sensor history and
+  Energy-statistics behavior unchanged for valid portal responses.
+
 ## 0.4.15 - 2026-09-08
 
 - Fix the Home Assistant compatibility regression test for the isolated

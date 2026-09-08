@@ -139,7 +139,12 @@ nedostupnost portálu, problém s přihlášením oznámí hned a po návratu kt
 z těchto stavů do normálu vytvoří jediné oznámení o obnovení. Chyby přihlášení
 řeší standardním procesem opětovné autentizace.
 
-Každé úspěšné stažení se spojí s odečty, které už byly během běhu integrace získány. Vnitřní hodinové mezery vyvolají až dva opakované požadavky s nastavitelnou prodlevou. Opravená hodnota portálu nahradí starší hodnotu se stejnou časovou značkou. Pokud mezery po těchto pokusech zůstanou, jediné trvalé oznámení uvede jejich počet a krátký přehled časů; po jejich doplnění vznikne jediné oznámení o obnově. Neexistující 02:00 při českém přechodu na letní čas se za chybějící odečet nepovažuje. Prahy, oznámení, počet pokusů i prodlevy lze změnit přes **Přenastavit**.
+Každé úspěšné stažení se spojí s odečty, které už byly během běhu integrace získány. Vnitřní hodinové mezery v **aktuálním rozsahu odpovědi portálu** vyvolají až dva opakované požadavky s nastavitelnou prodlevou. Historické mezery zjištěné samostatným backfillem se nehlásí jako výpadek aktuálního stažení, protože běžný požadavek portálu je nemůže opravit. Opravená hodnota portálu nahradí starší hodnotu se stejnou časovou značkou. Pokud mezery aktuálního rozsahu po těchto pokusech zůstanou, jediné trvalé oznámení uvede jejich počet a krátký přehled časů; po jejich doplnění vznikne jediné oznámení o obnově. Neexistující 02:00 při českém přechodu na letní čas se za chybějící odečet nepovažuje. Prahy, oznámení, počet pokusů i prodlevy lze změnit přes **Přenastavit**.
+
+Stav přechodů upozornění přežije restart Home Assistantu, takže stejný problém
+nevytvoří duplicitní upozornění. Stav neobsahuje údaje z portálu ani údaje o
+zákazníkovi a jeho uložení je pomocné: selhání úložiště nikdy nezabrání jinak
+platné aktualizaci portálu.
 
 ## Kompatibilita s portálem
 
@@ -158,6 +163,12 @@ identifikátory odpovídají nakonfigurovanému odběrnému místu. Chybějící
 neověřená tabulka nikdy neopravňuje použít data jiného místa.
 
 Pro zpětné načtení historie jsou potřeba aktuální prvky vlastního období portálu. Pokud je provozovatel změní nebo odstraní, běžné aktualizace zůstanou odděleny od chybného doplnění historie a diagnostický stav uvede chybu protokolu.
+
+Každý HTTP požadavek na portál má limit 45 sekund a přijme nejvýše 12 MiB
+odpovědi. Tyto pojistky bezpečně ukončí zaseknutou nebo neobvykle velkou
+odpověď, aniž mění běžné stahování, backfill nebo zpracování statistik Energie.
+Při odinstalování integrace se běžící backfill zastaví, uloží postup a po dalším
+nastavení pokračuje od uloženého místa.
 
 ## Bezpečnost
 

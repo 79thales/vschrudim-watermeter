@@ -116,19 +116,27 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
         )
         coordinator.source_status = "unknown"
         coordinator._source_problem_notification_active = False
+        coordinator._async_save_notification_state = AsyncMock()
 
         with (
             patch.object(module, "async_create") as create,
             patch.object(module, "async_dismiss"),
         ):
-            coordinator._set_source_status(
-                "error", error=ValueError("portal unavailable"), notify_problem=True
-            )
-            coordinator._set_source_status(
-                "error", error=ValueError("portal unavailable"), notify_problem=True
-            )
-            coordinator._set_source_status("delayed_data")
-            coordinator._set_source_status("ok")
+            async def change_states():
+                await coordinator._set_source_status(
+                    "error",
+                    error=ValueError("portal unavailable"),
+                    notify_problem=True,
+                )
+                await coordinator._set_source_status(
+                    "error",
+                    error=ValueError("portal unavailable"),
+                    notify_problem=True,
+                )
+                await coordinator._set_source_status("delayed_data")
+                await coordinator._set_source_status("ok")
+
+            asyncio.run(change_states())
 
         self.assertEqual(create.call_count, 2)
         self.assertEqual(coordinator.source_status, "ok")
@@ -145,18 +153,63 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
             entry_id="test", options={"notify_missing": True}
         )
         coordinator._missing_problem_notification_active = False
+        coordinator._async_save_notification_state = AsyncMock()
         missing = (datetime(2026, 1, 1, 11),)
 
         with (
             patch.object(module, "async_create") as create,
             patch.object(module, "async_dismiss"),
         ):
-            coordinator._handle_missing_hours_notification(missing, 2)
-            coordinator._handle_missing_hours_notification(missing, 2)
-            coordinator._handle_missing_hours_notification((), 0)
+            async def change_states():
+                await coordinator._handle_missing_hours_notification(missing, 2)
+                await coordinator._handle_missing_hours_notification(missing, 2)
+                await coordinator._handle_missing_hours_notification((), 0)
+
+            asyncio.run(change_states())
 
         self.assertEqual(create.call_count, 2)
         self.assertFalse(coordinator._missing_problem_notification_active)
+
+    def test_notification_transition_state_survives_a_restart(self):
+        from custom_components.vschrudim_watermeter.coordinator import (
+            VsChrudimCoordinator,
+        )
+
+        class Store:
+            async def async_load(self):
+                return {
+                    "source_status": "authentication_required",
+                    "source_problem_notification_active": True,
+                    "missing_problem_notification_active": True,
+                }
+
+        coordinator = object.__new__(VsChrudimCoordinator)
+        coordinator._notification_store = Store()
+        coordinator.source_status = "unknown"
+        coordinator._source_problem_notification_active = False
+        coordinator._missing_problem_notification_active = False
+
+        asyncio.run(coordinator._async_load_notification_state())
+
+        self.assertEqual(coordinator.source_status, "authentication_required")
+        self.assertTrue(coordinator._source_problem_notification_active)
+        self.assertTrue(coordinator._missing_problem_notification_active)
+
+    def test_shutdown_cancels_a_running_history_task(self):
+        from custom_components.vschrudim_watermeter.coordinator import (
+            VsChrudimCoordinator,
+        )
+
+        async def run_test():
+            coordinator = object.__new__(VsChrudimCoordinator)
+            waiting = asyncio.Event()
+            coordinator._history_backfill_task = asyncio.create_task(waiting.wait())
+            await asyncio.sleep(0)
+            await coordinator.async_shutdown()
+            return coordinator
+
+        coordinator = asyncio.run(run_test())
+        self.assertIsNone(coordinator._history_backfill_task)
 
     def test_external_history_statistics_are_monotonic(self):
         from custom_components.vschrudim_watermeter.history import (
@@ -375,8 +428,8 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
         coordinator.current_missing_hourly_readings = 0
         coordinator.oldest_missing_hour = None
         coordinator.last_success_at = None
-        coordinator._set_source_status = Mock()
-        coordinator._handle_missing_hours_notification = Mock()
+        coordinator._set_source_status = AsyncMock()
+        coordinator._handle_missing_hours_notification = AsyncMock()
         coordinator.async_update_listeners = Mock()
         coordinator._async_import_readings = AsyncMock()
         coordinator.async_start_history_backfill = Mock()
@@ -385,7 +438,7 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
 
         coordinator._async_import_readings.assert_not_awaited()
         coordinator.async_start_history_backfill.assert_not_called()
-        coordinator._handle_missing_hours_notification.assert_not_called()
+        coordinator._handle_missing_hours_notification.assert_not_awaited()
         self.assertEqual(coordinator.last_test_download_result, "success")
         self.assertEqual(coordinator.last_download_source, "html_table")
         self.assertEqual(
@@ -393,6 +446,82 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
             datetime(2026, 1, 1, 10),
         )
         self.assertEqual(coordinator.last_download_reading_count, 1)
+
+    def test_current_gap_detection_ignores_old_backfill_gaps(self):
+        from custom_components.vschrudim_watermeter.coordinator import (
+            VsChrudimCoordinator,
+        )
+        from custom_components.vschrudim_watermeter.models import (
+            ConsumptionPlace,
+            MeterReading,
+            WaterMeterData,
+        )
+
+        place = ConsumptionPlace("test", "", "", "", "")
+        current_data = WaterMeterData(
+            place,
+            (
+                MeterReading(datetime(2026, 9, 7, 10), 100.0),
+                MeterReading(datetime(2026, 9, 7, 11), 100.1),
+            ),
+            0.1,
+        )
+        coordinator = object.__new__(VsChrudimCoordinator)
+        coordinator._api_lock = asyncio.Lock()
+        coordinator.client = SimpleNamespace(
+            async_get_data=AsyncMock(return_value=current_data)
+        )
+        coordinator.place = place
+        coordinator.entry = SimpleNamespace(
+            options={"missing_retry_attempts": 0, "retry_delay": 5}
+        )
+        coordinator.hass = SimpleNamespace(loop=SimpleNamespace(call_soon=Mock()))
+        coordinator._known_readings = (
+            MeterReading(datetime(2025, 10, 13, 10), 90.0),
+            MeterReading(datetime(2025, 10, 26, 5), 91.0),
+        )
+        coordinator._consecutive_failures = 0
+        coordinator._set_source_status = AsyncMock()
+        coordinator._handle_missing_hours_notification = AsyncMock()
+        coordinator._async_import_readings = AsyncMock()
+        coordinator._async_record_download_attempt = AsyncMock()
+        coordinator.history_backfill_status = "not_started"
+
+        result = asyncio.run(coordinator._async_update_data())
+
+        self.assertEqual(result.missing_timestamps, ())
+        self.assertEqual(coordinator.current_missing_hourly_readings, 0)
+        coordinator.client.async_get_data.assert_awaited_once_with(place)
+        coordinator._handle_missing_hours_notification.assert_awaited_once_with((), 0)
+
+    def test_failed_download_keeps_known_readings_unchanged(self):
+        from homeassistant.helpers.update_coordinator import UpdateFailed
+        from custom_components.vschrudim_watermeter.api import VsChrudimProtocolError
+        from custom_components.vschrudim_watermeter.coordinator import (
+            VsChrudimCoordinator,
+        )
+        from custom_components.vschrudim_watermeter.models import MeterReading
+
+        known = (MeterReading(datetime(2026, 9, 7, 10), 100.0),)
+        coordinator = object.__new__(VsChrudimCoordinator)
+        coordinator._api_lock = asyncio.Lock()
+        coordinator.client = SimpleNamespace(
+            async_get_data=AsyncMock(side_effect=VsChrudimProtocolError("changed"))
+        )
+        coordinator.place = SimpleNamespace()
+        coordinator.entry = SimpleNamespace(
+            options={"failure_threshold": 3, "retry_delay": 5}
+        )
+        coordinator._known_readings = known
+        coordinator._consecutive_failures = 0
+        coordinator._set_source_status = AsyncMock()
+        coordinator._async_record_download_attempt = AsyncMock()
+
+        with self.assertRaises(UpdateFailed):
+            asyncio.run(coordinator._async_update_data())
+
+        self.assertEqual(coordinator._known_readings, known)
+        coordinator._async_record_download_attempt.assert_awaited_once()
 
     def test_retry_history_download_refreshes_before_starting_backfill(self):
         from custom_components.vschrudim_watermeter.coordinator import (
