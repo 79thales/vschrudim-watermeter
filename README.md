@@ -154,8 +154,9 @@ VS Chrudim supplies an authenticated ASP.NET WebForms website, not a documented 
 If the portal skips its consumption-place list and opens a previously selected
 reporting/detail context directly, the integration continues through that
 context only after its portal identifiers match the configured consumption
-place. An absent, unverified grid is never treated as permission to use another
-place's data.
+place. The confirmation accepts the portal's stable ASP.NET control suffix in
+either its form `name` or HTML `id` (including rendered text); an absent,
+unverified grid is never treated as permission to use another place's data.
 
 The portal's current custom-range controls are required for historical backfill.
 For measured-state downloads the integration supports verified direct CSV

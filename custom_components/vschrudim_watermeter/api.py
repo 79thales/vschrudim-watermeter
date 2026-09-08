@@ -33,6 +33,7 @@ _DATE_FORMATS: Final = ("%d.%m.%Y %H:%M", "%d.%m.%Y %H:%M:%S", "%d.%m.%Y")
 _ResultT = TypeVar("_ResultT")
 _REQUEST_TIMEOUT_SECONDS: Final = 45
 _MAX_RESPONSE_BYTES: Final = 12 * 1024 * 1024
+_RESPONSE_READ_CHUNK_BYTES: Final = 64 * 1024
 
 class VsChrudimError(Exception):
     """Base portal error."""
@@ -85,6 +86,12 @@ class _FormParser(HTMLParser):
         self.action = ""
         self.method = "GET"
         self.inputs: dict[str, str] = {}
+        # ASP.NET renders some read-only controls with a stable ``id`` but
+        # without the expected ``name``. Keep these separate from submitted
+        # successful controls: IDs are only used to verify the already
+        # selected consumption-place context.
+        self.context_values_by_id: dict[str, str] = {}
+        self._context_elements: list[tuple[str, str, list[str]]] = []
         self.input_types: dict[str, str] = {}
         self.submit_names: list[str] = []
         self.submit_descriptions: dict[str, str] = {}
@@ -106,9 +113,13 @@ class _FormParser(HTMLParser):
             self.method = (values.get("method", "GET") or "GET").upper()
         elif tag == "input":
             name = values.get("name")
+            value = values.get("value", "") or ""
+            input_id = values.get("id")
+            if input_id and input_id.casefold().endswith(("edcpid", "edcpevnum")):
+                self.context_values_by_id[input_id] = value
             if name:
                 input_type = (values.get("type", "text") or "text").lower()
-                self.inputs[name] = values.get("value", "") or ""
+                self.inputs[name] = value
                 self.input_types[name] = input_type
                 if input_type in {"submit", "image", "button"}:
                     self.submit_names.append(name)
@@ -153,13 +164,24 @@ class _FormParser(HTMLParser):
             if "selected" in values:
                 self._selected_option = option_value
 
+        context_id = values.get("id", "") or ""
+        if tag != "input" and context_id.casefold().endswith(
+            ("edcpid", "edcpevnum")
+        ):
+            self._context_elements.append((tag, context_id, []))
+
     def handle_data(self, data: str) -> None:
+        for _, _, text in self._context_elements:
+            text.append(data)
         if self._href:
             self._text.append(data)
         if self._button_name:
             self._button_text.append(data)
 
     def handle_endtag(self, tag: str) -> None:
+        if self._context_elements and tag == self._context_elements[-1][0]:
+            _, context_id, text = self._context_elements.pop()
+            self.context_values_by_id[context_id] = " ".join(text).strip()
         if tag == "a" and self._href:
             self.links.append((" ".join(self._text).strip(), self._href))
             self._href = ""
@@ -249,6 +271,14 @@ def _control_ending(values: dict[str, str], suffix: str) -> str:
     return next(
         (name for name in values if name.casefold().endswith(suffix)),
         "",
+    )
+
+
+def _control_values_ending(values: dict[str, str], suffix: str) -> tuple[str, ...]:
+    """Return every control value whose stable name or ID suffix matches."""
+    suffix = suffix.casefold()
+    return tuple(
+        value for name, value in values.items() if name.casefold().endswith(suffix)
     )
 
 
@@ -463,19 +493,26 @@ def _matches_selected_consumption_place(
 
     The working WebDownloader accepts a missing place grid only when the
     rendered detail page exposes ``edCpId``/``edCpEvNum`` controls matching
-    the requested place. This prevents a remembered session context from
+    the requested place. The portal may expose those stable suffixes in an
+    HTML ``name`` or an ``id`` (including rendered text); neither value is
+    sent or persisted here. This prevents a remembered session context from
     silently returning readings for another customer place.
     """
     form = _parse_form(html)
-    evidence_name = _control_ending(form.inputs, "edCpId")
-    technical_name = _control_ending(form.inputs, "edCpEvNum")
-    evidence = re.sub(r"\D", "", form.inputs.get(evidence_name, ""))
-    technical = re.sub(r"\D", "", form.inputs.get(technical_name, ""))
     expected_evidence = re.sub(r"\D", "", place.evidence_number)
     expected_technical = re.sub(r"\D", "", place.technical_number)
-    return bool(
-        (expected_evidence and evidence == expected_evidence)
-        or (expected_technical and technical == expected_technical)
+    evidence_values = _control_values_ending(
+        form.inputs, "edCpId"
+    ) + _control_values_ending(form.context_values_by_id, "edCpId")
+    technical_values = _control_values_ending(
+        form.inputs, "edCpEvNum"
+    ) + _control_values_ending(form.context_values_by_id, "edCpEvNum")
+    return any(
+        expected_evidence and re.sub(r"\D", "", value) == expected_evidence
+        for value in evidence_values
+    ) or any(
+        expected_technical and re.sub(r"\D", "", value) == expected_technical
+        for value in technical_values
     )
 
 def _number(value: str) -> float | None:
@@ -1034,9 +1071,19 @@ class VsChrudimClient:
         content_length = response.content_length
         if content_length is not None and content_length > _MAX_RESPONSE_BYTES:
             raise VsChrudimProtocolError("Portal response exceeded the safe size limit")
-        body = await response.content.read(_MAX_RESPONSE_BYTES + 1)
-        if len(body) > _MAX_RESPONSE_BYTES:
-            raise VsChrudimProtocolError("Portal response exceeded the safe size limit")
+        # ``StreamReader.read(n)`` may return one currently available network
+        # block rather than the complete response. Read until EOF explicitly;
+        # otherwise a split WebForms page can lose its place grid or controls.
+        body = bytearray()
+        while True:
+            chunk = await response.content.read(_RESPONSE_READ_CHUNK_BYTES)
+            if not chunk:
+                break
+            body.extend(chunk)
+            if len(body) > _MAX_RESPONSE_BYTES:
+                raise VsChrudimProtocolError(
+                    "Portal response exceeded the safe size limit"
+                )
         try:
             encoding = response.charset or response.get_encoding()
         except (LookupError, RuntimeError):

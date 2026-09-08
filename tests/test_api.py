@@ -131,6 +131,24 @@ class MeasuredStatesNavigationTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(api._matches_selected_consumption_place(html, self._place()))
 
+    def test_recognizes_verified_selected_place_context_by_input_id(self):
+        html = """
+        <form>
+          <input id="ctl00_Detail_edCpId" type="hidden" value="123">
+          <input id="ctl00_Detail_edCpEvNum" type="hidden" value="456">
+        </form>
+        """
+
+        self.assertTrue(api._matches_selected_consumption_place(html, self._place()))
+
+    def test_recognizes_verified_selected_place_context_by_rendered_id(self):
+        html = """
+        <section id="ctl00_Detail_edCpId"><span>123</span></section>
+        <span id="ctl00_Detail_edCpEvNum">456</span>
+        """
+
+        self.assertTrue(api._matches_selected_consumption_place(html, self._place()))
+
     def test_rejects_selected_context_for_another_place(self):
         html = """
         <form>
@@ -143,9 +161,12 @@ class MeasuredStatesNavigationTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_bounded_response_reader_preserves_normal_portal_text(self):
         class Content:
+            def __init__(self):
+                self.chunks = ["Měřidlo;Čas;Stav".encode(), b""]
+
             async def read(self, maximum):
                 self.maximum = maximum
-                return "Měřidlo;Čas;Stav".encode()
+                return self.chunks.pop(0)
 
         class Response:
             content_length = len("Měřidlo;Čas;Stav".encode())
@@ -159,7 +180,33 @@ class MeasuredStatesNavigationTests(unittest.IsolatedAsyncioTestCase):
         text = await api.VsChrudimClient._read_bounded_response_text(Response())
 
         self.assertEqual(text, "Měřidlo;Čas;Stav")
-        self.assertEqual(Response.content.maximum, api._MAX_RESPONSE_BYTES + 1)
+        self.assertEqual(Response.content.maximum, api._RESPONSE_READ_CHUNK_BYTES)
+
+    async def test_bounded_response_reader_reads_all_network_chunks(self):
+        class Content:
+            def __init__(self):
+                self.chunks = [b"<table id=\"grid\">", b"complete page</table>", b""]
+                self.calls = 0
+
+            async def read(self, maximum):
+                self.calls += 1
+                self.maximum = maximum
+                return self.chunks.pop(0)
+
+        class Response:
+            content_length = None
+            charset = "utf-8"
+            content = Content()
+
+            @staticmethod
+            def get_encoding():
+                return "utf-8"
+
+        text = await api.VsChrudimClient._read_bounded_response_text(Response())
+
+        self.assertEqual(text, '<table id="grid">complete page</table>')
+        self.assertEqual(Response.content.calls, 3)
+        self.assertEqual(Response.content.maximum, api._RESPONSE_READ_CHUNK_BYTES)
 
     async def test_bounded_response_reader_rejects_oversized_content(self):
         class Content:
@@ -177,10 +224,29 @@ class MeasuredStatesNavigationTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(api.VsChrudimProtocolError, "size limit"):
             await api.VsChrudimClient._read_bounded_response_text(Response())
 
+    async def test_bounded_response_reader_rejects_oversized_stream(self):
+        class Content:
+            def __init__(self):
+                self.chunks = [b"ab", b"c"]
+
+            async def read(self, maximum):
+                return self.chunks.pop(0)
+
+        class Response:
+            content_length = None
+            content = Content()
+
+        with patch.object(api, "_MAX_RESPONSE_BYTES", 2):
+            with self.assertRaisesRegex(api.VsChrudimProtocolError, "size limit"):
+                await api.VsChrudimClient._read_bounded_response_text(Response())
+
     async def test_bounded_response_reader_falls_back_from_invalid_charset(self):
         class Content:
+            def __init__(self):
+                self.chunks = ["Měřidlo;Čas;Stav".encode(), b""]
+
             async def read(self, maximum):
-                return "Měřidlo;Čas;Stav".encode()
+                return self.chunks.pop(0)
 
         class Response:
             content_length = len("Měřidlo;Čas;Stav".encode())

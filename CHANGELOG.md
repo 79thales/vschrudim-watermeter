@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.17 - 2026-09-08
+
+- Fix the 0.4.16 response-size guard so it reads every received HTTP chunk;
+  a split ASP.NET page could otherwise omit the consumption-place grid.
+- Recognize the VS Chrudim selected-consumption-place controls by their stable
+  ASP.NET `id` suffix (including rendered text) as well as their form `name`,
+  matching the verified desktop client behavior without weakening place
+  verification.
+
 ## 0.4.16 - 2026-09-08
 
 - Prevent historical backfill gaps from being reported as missing readings in

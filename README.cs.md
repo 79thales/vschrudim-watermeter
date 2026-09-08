@@ -159,8 +159,10 @@ a nespouští WebDownloader.
 
 Pokud portál přeskočí seznam odběrných míst a otevře rovnou dříve vybraný
 reporting/detail, integrace přes něj pokračuje pouze tehdy, když portálové
-identifikátory odpovídají nakonfigurovanému odběrnému místu. Chybějící
-neověřená tabulka nikdy neopravňuje použít data jiného místa.
+identifikátory odpovídají nakonfigurovanému odběrnému místu. Potvrzení přijme
+stabilní ASP.NET příponu ovladače ve formulářovém `name` i HTML `id` včetně
+zobrazeného textu; chybějící neověřená tabulka nikdy neopravňuje použít data
+jiného místa.
 
 Pro zpětné načtení historie jsou potřeba aktuální prvky vlastního období portálu. Pokud je provozovatel změní nebo odstraní, běžné aktualizace zůstanou odděleny od chybného doplnění historie a diagnostický stav uvede chybu protokolu.
 
