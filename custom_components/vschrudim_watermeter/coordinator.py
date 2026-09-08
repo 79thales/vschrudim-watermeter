@@ -1,6 +1,7 @@
 """Coordinator for VSChrudim watermeter."""
 from __future__ import annotations
 import asyncio
+from dataclasses import replace
 from datetime import date, datetime, timedelta
 import logging
 import math
@@ -53,11 +54,21 @@ from .history import (
 )
 from .attempts import DownloadAttempt, append_attempt, load_attempt_history, sanitize_error_message
 from .recovery import count_duplicate_readings, find_missing_hours, merge_readings
+from .statistics_health import (
+    EnergyStatisticsHealth,
+    MeterRegisterHealth,
+    StatisticsImportResult,
+    StatisticsState,
+    assess_energy_statistics,
+    assess_meter_register,
+    energy_statistics_error,
+)
 
 _LOGGER = logging.getLogger(__name__)
 _HISTORY_STORE_VERSION = 1
 _ATTEMPT_STORE_VERSION = 1
 _NOTIFICATION_STORE_VERSION = 1
+_STATISTICS_STATE_STORE_VERSION = 1
 _BACKFILL_REQUEST_DELAY = 2
 _STATISTICS_OPERATION_TIMEOUT = 30
 _MAX_FAILURE_RETRY_SECONDS = 60 * 60
@@ -113,6 +124,15 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
         self._statistics_operation_lock = asyncio.Lock()
         self._statistics_writes_paused = False
         self.statistics_ready = True
+        self.statistics_write_status = "never"
+        self.statistics_last_attempt_at: datetime | None = None
+        self.statistics_last_success_at: datetime | None = None
+        self.statistics_last_error_type: str | None = None
+        self.statistics_last_error: str | None = None
+        self.statistics_last_written_points = 0
+        self.statistics_recovery_pending = False
+        self.energy_statistics_health = EnergyStatisticsHealth()
+        self.meter_register_health = MeterRegisterHealth()
         self.last_attempt_at: datetime | None = None
         self.last_success_at: datetime | None = None
         self.last_attempt_result = "never"
@@ -132,6 +152,7 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
         self.last_test_download_error: str | None = None
         self._source_problem_notification_active = False
         self._missing_problem_notification_active = False
+        self._statistics_problem_notification_active = False
         self.history_backfill_status = "not_started"
         self.history_backfill_started_at: datetime | None = None
         self.history_backfill_completed_at: datetime | None = None
@@ -158,14 +179,28 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
             _NOTIFICATION_STORE_VERSION,
             f"{DOMAIN}.notification_state.{entry.entry_id}",
         )
+        self._statistics_state_store: Store[dict[str, object]] = Store(
+            hass,
+            _STATISTICS_STATE_STORE_VERSION,
+            f"{DOMAIN}.statistics_state.{entry.entry_id}",
+        )
         self.download_attempt_history: list[DownloadAttempt] = []
 
     async def async_initialize(self) -> None:
         """Restore non-sensitive history progress after restart."""
         await self._async_load_notification_state()
-        attempts = await self._attempt_store.async_load()
+        await self._async_load_statistics_state()
+        try:
+            attempts = await self._attempt_store.async_load()
+        except Exception:  # pragma: no cover - backend storage varies by HA
+            _LOGGER.warning("Could not restore download-attempt diagnostics")
+            attempts = None
         self.download_attempt_history = load_attempt_history(attempts)
-        stored = await self._history_store.async_load()
+        try:
+            stored = await self._history_store.async_load()
+        except Exception:  # pragma: no cover - backend storage varies by HA
+            _LOGGER.warning("Could not restore history-backfill progress")
+            return
         if not isinstance(stored, dict):
             return
         status = str(stored.get("status") or "not_started")
@@ -203,6 +238,55 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
         error = stored.get("error")
         self.history_backfill_error = str(error) if error else None
 
+    def _statistics_state(self) -> StatisticsState:
+        """Return a deliberately small checkpoint for external statistics."""
+        return StatisticsState(
+            status=self.statistics_write_status,
+            last_attempt_at=self.statistics_last_attempt_at,
+            last_success_at=self.statistics_last_success_at,
+            last_error_type=self.statistics_last_error_type,
+            last_error=self.statistics_last_error,
+            last_written_points=self.statistics_last_written_points,
+            recovery_pending=self.statistics_recovery_pending,
+            health_status=self.energy_statistics_health.status,
+            last_health_check_at=self.energy_statistics_health.checked_at,
+        )
+
+    def _apply_statistics_state(self, state: StatisticsState) -> None:
+        """Apply only validated state restored from the dedicated Store."""
+        self.statistics_write_status = state.status
+        self.statistics_last_attempt_at = state.last_attempt_at
+        self.statistics_last_success_at = state.last_success_at
+        self.statistics_last_error_type = state.last_error_type
+        self.statistics_last_error = state.last_error
+        self.statistics_last_written_points = state.last_written_points
+        self.statistics_recovery_pending = state.recovery_pending
+        self.energy_statistics_health = EnergyStatisticsHealth(
+            status=state.health_status,
+            checked_at=state.last_health_check_at,
+            write_pending=state.recovery_pending,
+            error_type=state.last_error_type,
+            error=state.last_error,
+        )
+
+    async def _async_load_statistics_state(self) -> None:
+        """Restore a safe statistics checkpoint without retaining readings."""
+        try:
+            stored = await self._statistics_state_store.async_load()
+        except Exception:  # pragma: no cover - backend storage varies by HA
+            _LOGGER.warning("Could not restore Energy-statistics state")
+            return
+        self._apply_statistics_state(StatisticsState.from_dict(stored))
+
+    async def _async_save_statistics_state(self) -> None:
+        """Best-effort persistence that can never invalidate portal data."""
+        try:
+            await self._statistics_state_store.async_save(
+                self._statistics_state().as_dict()
+            )
+        except Exception:  # pragma: no cover - backend storage varies by HA
+            _LOGGER.warning("Could not save Energy-statistics state")
+
     async def _async_load_notification_state(self) -> None:
         """Restore only the safe notification-transition state."""
         try:
@@ -224,6 +308,11 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
         missing_problem_active = stored.get("missing_problem_notification_active")
         if isinstance(missing_problem_active, bool):
             self._missing_problem_notification_active = missing_problem_active
+        statistics_problem_active = stored.get(
+            "statistics_problem_notification_active"
+        )
+        if isinstance(statistics_problem_active, bool):
+            self._statistics_problem_notification_active = statistics_problem_active
 
     async def _async_save_notification_state(self) -> None:
         """Persist transition flags without customer or portal data."""
@@ -236,6 +325,9 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
                     ),
                     "missing_problem_notification_active": (
                         self._missing_problem_notification_active
+                    ),
+                    "statistics_problem_notification_active": (
+                        self._statistics_problem_notification_active
                     ),
                 }
             )
@@ -261,6 +353,14 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
     @property
     def _missing_recovered_notification_id(self) -> str:
         return f"{DOMAIN}_{self.entry.entry_id}_missing_data_recovered"
+
+    @property
+    def _statistics_notification_id(self) -> str:
+        return f"{DOMAIN}_{self.entry.entry_id}_energy_statistics"
+
+    @property
+    def _statistics_recovered_notification_id(self) -> str:
+        return f"{DOMAIN}_{self.entry.entry_id}_energy_statistics_recovered"
 
     def _source_status_for_readings(
         self, readings: tuple[MeterReading, ...]
@@ -388,6 +488,52 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
         if previous_problem_active != self._missing_problem_notification_active:
             await self._async_save_notification_state()
 
+    async def _handle_energy_statistics_notification(
+        self, health: EnergyStatisticsHealth
+    ) -> None:
+        """Notify once when the integration-owned series needs attention.
+
+        The message intentionally contains only a state and safe counters. It
+        never exposes a statistic ID, portal response, customer details or a
+        raw Recorder error.
+        """
+        previous_problem_active = self._statistics_problem_notification_active
+        problem = health.status in {"pending", "incomplete", "error"}
+        if problem:
+            if not self._statistics_problem_notification_active:
+                async_dismiss(self.hass, self._statistics_recovered_notification_id)
+                message = (
+                    "VSChrudim Energy statistics need attention. "
+                    f"Status: {health.status}; missing consumption points: "
+                    f"{health.missing_consumption_points}; missing cost points: "
+                    f"{health.missing_cost_points}."
+                )
+                if health.error:
+                    message += f" Last error: {health.error}"
+                async_create(
+                    self.hass,
+                    message,
+                    title="VSChrudim watermeter – Energy statistics pending",
+                    notification_id=self._statistics_notification_id,
+                )
+                self._statistics_problem_notification_active = True
+        else:
+            async_dismiss(self.hass, self._statistics_notification_id)
+            if health.status == "ok" and self._statistics_problem_notification_active:
+                async_create(
+                    self.hass,
+                    "VSChrudim Energy statistics were verified successfully again.",
+                    title="VSChrudim watermeter – Energy statistics restored",
+                    notification_id=self._statistics_recovered_notification_id,
+                )
+                self._statistics_problem_notification_active = False
+            elif health.status == "unknown":
+                # No completed portal hour is not a problem and must not
+                # create a stale alert on a fresh installation.
+                self._statistics_problem_notification_active = False
+        if previous_problem_active != self._statistics_problem_notification_active:
+            await self._async_save_notification_state()
+
     async def _async_update_data(self) -> WaterMeterData:
         started_at = dt_util.now()
         started_monotonic = monotonic()
@@ -442,6 +588,12 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
             )
             self.current_missing_hourly_readings = len(missing)
             self.oldest_missing_hour = missing[0] if missing else None
+            try:
+                self.meter_register_health = assess_meter_register(
+                    merged, checked_at=dt_util.now()
+                )
+            except Exception:  # pragma: no cover - defensive diagnostics guard
+                _LOGGER.warning("Could not assess water-meter register health")
             result = WaterMeterData(
                 self.place,
                 merged,
@@ -576,28 +728,275 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
         """Integration-owned statistic ID for Energy water cost."""
         return f"{DOMAIN}:{self.entry.entry_id.casefold()}_water_cost"
 
-    async def _async_import_readings(
+    def _expected_energy_statistics(
+        self,
+        readings: tuple[MeterReading, ...],
+        *,
+        now: datetime,
+    ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+        """Build exactly the completed portal points the writer would create."""
+        local_tz = dt_util.get_time_zone(self.hass.config.time_zone)
+        consumption = meter_statistics(readings, local_tz=local_tz, now=now)
+        cost = cost_statistics(
+            readings,
+            price_per_m3=float(
+                self.entry.options.get(CONF_PRICE_PER_M3, DEFAULT_PRICE_PER_M3)
+            ),
+            local_tz=local_tz,
+            now=now,
+        )
+        # StatisticData is a TypedDict at runtime. The explicit conversion
+        # keeps the read-only health helper independent of Home Assistant.
+        return [dict(row) for row in consumption], [dict(row) for row in cost]
+
+    def _statistics_readings(
+        self, readings: tuple[MeterReading, ...] | None
+    ) -> tuple[MeterReading, ...]:
+        """Choose only already validated in-memory readings for a check."""
+        if readings is not None:
+            return readings
+        if self._known_readings:
+            return self._known_readings
+        data = self.data
+        return data.readings if data else ()
+
+    async def _async_read_energy_statistics(
+        self,
+        *,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+        """Read the two integration-owned external series without mutation."""
+        rows = await get_instance(self.hass).async_add_executor_job(
+            statistics_during_period,
+            self.hass,
+            start or dt_util.utc_from_timestamp(0),
+            end,
+            {self.consumption_statistic_id, self.cost_statistic_id},
+            "hour",
+            None,
+            {"state", "sum"},
+        )
+        if not isinstance(rows, dict):
+            raise HomeAssistantError("Recorder returned an invalid statistics result")
+
+        def valid_rows(value: object) -> list[dict[str, object]]:
+            if not isinstance(value, list):
+                return []
+            return [dict(item) for item in value if isinstance(item, dict)]
+
+        return (
+            valid_rows(rows.get(self.consumption_statistic_id)),
+            valid_rows(rows.get(self.cost_statistic_id)),
+        )
+
+    async def _async_verify_statistics_points(
         self, readings: tuple[MeterReading, ...]
-    ) -> int:
-        """Queue completed hours under the integration-owned statistic IDs."""
-        if self._statistics_writes_paused or not readings:
-            return 0
+    ) -> bool:
+        """Verify one backfill block before its source cursor advances.
+
+        This intentionally reads only the block's bounded statistic interval.
+        A full diagnostic health scan still runs once at backfill completion,
+        while every individual checkpoint remains protected from a failed
+        Recorder write without repeatedly querying a growing three-year range.
+        """
+        checked_at = dt_util.now()
+        try:
+            expected_consumption, expected_cost = self._expected_energy_statistics(
+                readings, now=checked_at
+            )
+            expected_starts = [
+                start
+                for row in [*expected_consumption, *expected_cost]
+                if isinstance((start := row.get("start")), datetime)
+            ]
+            if not expected_starts:
+                return True
+            start = min(expected_starts)
+            end = max(expected_starts) + timedelta(hours=1)
+            health: EnergyStatisticsHealth | None = None
+            for verification_attempt in range(6):
+                consumption_rows, cost_rows = await self._async_read_energy_statistics(
+                    start=start, end=end
+                )
+                health = assess_energy_statistics(
+                    expected_consumption_rows=expected_consumption,
+                    expected_cost_rows=expected_cost,
+                    consumption_rows=consumption_rows,
+                    cost_rows=cost_rows,
+                    portal_latest_timestamp=readings[-1].timestamp,
+                    write_pending=False,
+                    checked_at=checked_at,
+                )
+                if health.status == "ok":
+                    return True
+                if verification_attempt < 5:
+                    await asyncio.sleep(0.2)
+            assert health is not None
+        except asyncio.CancelledError:
+            raise
+        except Exception as err:  # pragma: no cover - Recorder backend errors vary
+            _LOGGER.warning(
+                "Could not verify backfill Energy statistics (%s)",
+                type(err).__name__,
+            )
+            self.statistics_write_status = "error"
+            self.statistics_recovery_pending = True
+            self.statistics_last_error_type = type(err).__name__
+            self.statistics_last_error = sanitize_error_message(err)
+            await self._async_publish_energy_statistics_health(
+                energy_statistics_error(
+                    err, checked_at=checked_at, write_pending=True
+                ),
+                update_listeners=False,
+            )
+            return False
+
+        self.statistics_write_status = "pending"
+        self.statistics_recovery_pending = True
+        health = replace(health, write_pending=True)
+        await self._async_publish_energy_statistics_health(
+            health, update_listeners=False
+        )
+        return False
+
+    async def _async_publish_energy_statistics_health(
+        self,
+        health: EnergyStatisticsHealth,
+        *,
+        update_listeners: bool,
+    ) -> None:
+        """Persist and publish auxiliary state without risking portal data."""
+        self.energy_statistics_health = health
+        await self._async_save_statistics_state()
+        try:
+            await self._handle_energy_statistics_notification(health)
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # pragma: no cover - notification backends vary
+            _LOGGER.warning("Could not update Energy-statistics notification")
+        if update_listeners:
+            try:
+                self.async_update_listeners()
+            except Exception:  # pragma: no cover - listener failures are external
+                _LOGGER.warning("Could not publish Energy-statistics diagnostics")
+
+    async def async_check_energy_statistics(
+        self,
+        readings: tuple[MeterReading, ...] | None = None,
+        *,
+        _allow_during_operation: bool = False,
+        _verification_retries: int = 0,
+        update_listeners: bool = True,
+    ) -> EnergyStatisticsHealth:
+        """Read and compare Energy statistics without contacting the portal.
+
+        This method intentionally has no write, delete, backfill or sensor-data
+        side effect. It uses only the coordinator's already validated readings
+        and the two integration-owned Recorder series.
+        """
+        if self.statistics_operation_running and not _allow_during_operation:
+            raise HomeAssistantError("Energy statistics maintenance is in progress")
+
+        known_readings = self._statistics_readings(readings)
+        checked_at = dt_util.now()
+        try:
+            expected_consumption, expected_cost = self._expected_energy_statistics(
+                known_readings, now=checked_at
+            )
+            for verification_attempt in range(max(0, _verification_retries) + 1):
+                consumption_rows, cost_rows = await self._async_read_energy_statistics()
+                health = assess_energy_statistics(
+                    expected_consumption_rows=expected_consumption,
+                    expected_cost_rows=expected_cost,
+                    consumption_rows=consumption_rows,
+                    cost_rows=cost_rows,
+                    portal_latest_timestamp=(
+                        known_readings[-1].timestamp if known_readings else None
+                    ),
+                    write_pending=False,
+                    checked_at=checked_at,
+                )
+                if (
+                    health.status != "incomplete"
+                    or verification_attempt >= max(0, _verification_retries)
+                ):
+                    break
+                # Recorder accepts external statistics asynchronously. A short
+                # bounded wait avoids classifying a just-accepted normal write
+                # as missing before Recorder has committed it.
+                await asyncio.sleep(0.2)
+        except asyncio.CancelledError:
+            raise
+        except Exception as err:  # pragma: no cover - Recorder backend errors vary
+            _LOGGER.warning("Could not check Energy statistics (%s)", type(err).__name__)
+            self.statistics_write_status = "error"
+            self.statistics_recovery_pending = True
+            self.statistics_last_error_type = type(err).__name__
+            self.statistics_last_error = sanitize_error_message(err)
+            health = energy_statistics_error(
+                err,
+                checked_at=checked_at,
+                write_pending=True,
+            )
+            await self._async_publish_energy_statistics_health(
+                health, update_listeners=update_listeners
+            )
+            return health
+
+        if health.status == "ok":
+            self.statistics_write_status = "ok"
+            self.statistics_recovery_pending = False
+            self.statistics_last_error_type = None
+            self.statistics_last_error = None
+        elif health.status == "incomplete":
+            # A mismatch is not a portal failure. Keep the verified portal
+            # update, checkpoint a retry for a later successful update, and
+            # leave all existing statistics untouched.
+            self.statistics_write_status = "pending"
+            self.statistics_recovery_pending = True
+            health = replace(health, write_pending=True)
+        elif health.status == "unknown" and self.statistics_recovery_pending:
+            health = replace(health, write_pending=True)
+
+        await self._async_publish_energy_statistics_health(
+            health, update_listeners=update_listeners
+        )
+        return health
+
+    async def _async_import_readings(
+        self,
+        readings: tuple[MeterReading, ...],
+        *,
+        verification_readings: tuple[MeterReading, ...] | None = None,
+    ) -> StatisticsImportResult:
+        """Queue completed external statistics without invalidating live data."""
+        if self._statistics_writes_paused:
+            return StatisticsImportResult(
+                accepted=False,
+                error_type="StatisticsWritesPaused",
+                error="Energy statistics writes are paused",
+            )
+        if not readings:
+            return StatisticsImportResult(accepted=True)
+
+        attempted_at = dt_util.now()
+        self.statistics_last_attempt_at = attempted_at
         try:
             local_tz = dt_util.get_time_zone(self.hass.config.time_zone)
-            now = dt_util.now()
             initial_sum, initial_meter_state = await self._async_statistics_seed(
-                readings, local_tz, now
+                readings, local_tz, attempted_at
             )
-            imported = async_add_external_meter_statistics(
+            consumption_points = async_add_external_meter_statistics(
                 self.hass,
                 statistic_id=self.consumption_statistic_id,
                 readings=readings,
                 local_tz=local_tz,
-                now=now,
+                now=attempted_at,
                 initial_sum=initial_sum,
                 initial_meter_state=initial_meter_state,
             )
-            async_add_external_cost_statistics(
+            cost_points = async_add_external_cost_statistics(
                 self.hass,
                 statistic_id=self.cost_statistic_id,
                 readings=readings,
@@ -608,17 +1007,69 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
                 ),
                 currency="CZK",
                 local_tz=local_tz,
-                now=now,
+                now=attempted_at,
                 initial_sum=initial_sum,
                 initial_meter_state=initial_meter_state,
             )
-            return imported
+            if consumption_points != cost_points:
+                raise HomeAssistantError("Energy statistics point counts did not match")
+        except asyncio.CancelledError:
+            raise
         except Exception as err:  # pragma: no cover - Recorder backend errors vary
-            # Statistics import is auxiliary to a verified live download. Do
-            # not discard current readings merely because Recorder temporarily
-            # cannot accept an external statistic write.
+            # Statistics are auxiliary to a verified portal download. Do not
+            # discard the live readings or clear any existing series when the
+            # Recorder write is temporarily unavailable.
             _LOGGER.error("Could not import water-meter history (%s)", type(err).__name__)
-            return 0
+            self.statistics_write_status = "error"
+            self.statistics_recovery_pending = True
+            self.statistics_last_error_type = type(err).__name__
+            self.statistics_last_error = sanitize_error_message(err)
+            health = energy_statistics_error(
+                err,
+                checked_at=attempted_at,
+                write_pending=True,
+            )
+            await self._async_publish_energy_statistics_health(
+                health, update_listeners=False
+            )
+            return StatisticsImportResult(
+                accepted=False,
+                error_type=type(err).__name__,
+                error=sanitize_error_message(err),
+            )
+
+        self.statistics_last_success_at = attempted_at
+        self.statistics_last_written_points = consumption_points
+        self.statistics_last_error_type = None
+        self.statistics_last_error = None
+        if consumption_points:
+            # The write is idempotent, but remains pending until the read-only
+            # Recorder comparison verifies both external series.
+            self.statistics_write_status = "pending"
+            self.statistics_recovery_pending = True
+        else:
+            self.statistics_write_status = "ok"
+            self.statistics_recovery_pending = False
+        await self._async_save_statistics_state()
+
+        # A normal update gets a complete read-only health snapshot. During a
+        # history scan, verify only the block about to be checkpointed; this
+        # avoids repeatedly reading the entire growing three-year series while
+        # still refusing to advance that block after a failed writer result.
+        if verification_readings is None:
+            await self.async_check_energy_statistics(
+                readings, _verification_retries=5, update_listeners=False
+            )
+        elif not await self._async_verify_statistics_points(verification_readings):
+            return StatisticsImportResult(
+                accepted=False,
+                written_points=consumption_points,
+                error_type="StatisticsVerificationPending",
+                error="Energy statistics write was not verified",
+            )
+        return StatisticsImportResult(
+            accepted=True, written_points=consumption_points
+        )
 
     async def _async_statistics_seed(
         self,
@@ -738,7 +1189,36 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
         async with self._statistics_operation_lock:
             self._statistics_writes_paused = True
             self.statistics_ready = False
-            await self._async_clear_energy_statistics()
+            try:
+                await self._async_clear_energy_statistics()
+            except asyncio.CancelledError:
+                raise
+            except Exception as err:
+                self.statistics_write_status = "error"
+                self.statistics_recovery_pending = True
+                self.statistics_last_error_type = type(err).__name__
+                self.statistics_last_error = sanitize_error_message(err)
+                await self._async_publish_energy_statistics_health(
+                    energy_statistics_error(
+                        err,
+                        checked_at=dt_util.now(),
+                        write_pending=True,
+                    ),
+                    update_listeners=True,
+                )
+                raise
+            self.statistics_write_status = "pending"
+            self.statistics_recovery_pending = False
+            self.statistics_last_error_type = None
+            self.statistics_last_error = None
+            await self._async_publish_energy_statistics_health(
+                EnergyStatisticsHealth(
+                    status="pending",
+                    checked_at=dt_util.now(),
+                    write_pending=False,
+                ),
+                update_listeners=True,
+            )
 
     async def _async_fetch_complete_source_data(self) -> tuple[MeterReading, ...]:
         """Fetch and validate every available portal hour before a rebuild."""
@@ -878,6 +1358,7 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
         """Safely replace Energy statistics only after complete source validation."""
         if confirm is not True:
             raise HomeAssistantError("confirm=true is required to rebuild statistics")
+        readings: tuple[MeterReading, ...]
         async with self._statistics_operation_lock:
             # This deliberate preflight happens before the destructive clear.
             # If the portal is unavailable or its data is malformed, existing
@@ -885,31 +1366,71 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
             readings = await self._async_fetch_complete_source_data()
             self._statistics_writes_paused = True
             self.statistics_ready = False
-            await self._async_clear_energy_statistics()
-            local_tz = dt_util.get_time_zone(self.hass.config.time_zone)
-            now = dt_util.now()
-            async_add_external_meter_statistics(
-                self.hass,
-                statistic_id=self.consumption_statistic_id,
-                readings=readings,
-                local_tz=local_tz,
-                now=now,
-            )
-            async_add_external_cost_statistics(
-                self.hass,
-                statistic_id=self.cost_statistic_id,
-                readings=readings,
-                price_per_m3=float(
-                    self.entry.options.get(CONF_PRICE_PER_M3, DEFAULT_PRICE_PER_M3)
-                ),
-                currency="CZK",
-                local_tz=local_tz,
-                now=now,
-            )
-            await self._async_verify_energy_statistics(readings)
+            attempted_at = dt_util.now()
+            self.statistics_last_attempt_at = attempted_at
+            try:
+                await self._async_clear_energy_statistics()
+                local_tz = dt_util.get_time_zone(self.hass.config.time_zone)
+                consumption_points = async_add_external_meter_statistics(
+                    self.hass,
+                    statistic_id=self.consumption_statistic_id,
+                    readings=readings,
+                    local_tz=local_tz,
+                    now=attempted_at,
+                )
+                cost_points = async_add_external_cost_statistics(
+                    self.hass,
+                    statistic_id=self.cost_statistic_id,
+                    readings=readings,
+                    price_per_m3=float(
+                        self.entry.options.get(
+                            CONF_PRICE_PER_M3, DEFAULT_PRICE_PER_M3
+                        )
+                    ),
+                    currency="CZK",
+                    local_tz=local_tz,
+                    now=attempted_at,
+                )
+                if consumption_points != cost_points:
+                    raise HomeAssistantError(
+                        "Energy statistics point counts did not match"
+                    )
+                await self._async_verify_energy_statistics(readings)
+            except asyncio.CancelledError:
+                raise
+            except Exception as err:
+                # A user explicitly chose the destructive operation. Keep
+                # ordinary live sensor history untouched and leave automatic
+                # writes paused so an incomplete manual rebuild is never
+                # silently mixed with a later incremental update.
+                self.statistics_write_status = "error"
+                self.statistics_recovery_pending = True
+                self.statistics_last_error_type = type(err).__name__
+                self.statistics_last_error = sanitize_error_message(err)
+                await self._async_publish_energy_statistics_health(
+                    energy_statistics_error(
+                        err,
+                        checked_at=dt_util.now(),
+                        write_pending=True,
+                    ),
+                    update_listeners=True,
+                )
+                raise
             self._known_readings = merge_readings(self._known_readings, readings)
+            self.statistics_last_success_at = attempted_at
+            self.statistics_last_written_points = consumption_points
+            self.statistics_write_status = "ok"
+            self.statistics_recovery_pending = False
+            self.statistics_last_error_type = None
+            self.statistics_last_error = None
             self.statistics_ready = True
             self._statistics_writes_paused = False
+            await self._async_save_statistics_state()
+
+        # The rebuild verification above is the safety gate. A second normal
+        # read-only health snapshot fills the diagnostic counters and may
+        # never undo the completed rebuild.
+        await self.async_check_energy_statistics(readings)
 
     @property
     def statistics_operation_running(self) -> bool:
@@ -1040,6 +1561,11 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
 
     def async_start_history_backfill(self, resume_only: bool = False) -> bool:
         """Start or resume the bounded three-year history scan."""
+        if self._statistics_writes_paused:
+            # An explicitly cleared or interrupted destructive maintenance
+            # operation leaves the writer paused by design. Do not fetch and
+            # then repeatedly fail history blocks until the user rebuilds it.
+            return False
         if self._history_backfill_task and not self._history_backfill_task.done():
             return False
         resumable = (
@@ -1128,9 +1654,28 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
                         )
                 assert readings is not None
                 self._known_readings = merge_readings(self._known_readings, readings)
-                self.history_backfill_imported_hours += await self._async_import_readings(
-                    self._known_readings
+                statistics_result = await self._async_import_readings(
+                    self._known_readings,
+                    verification_readings=readings,
                 )
+                if not statistics_result.accepted:
+                    # Do not advance the source cursor for a block whose
+                    # external statistic write was not accepted. The next
+                    # successful portal update will resume the same safe,
+                    # idempotent block without deleting anything.
+                    raise HomeAssistantError(
+                        statistics_result.error
+                        or "Energy statistics write is pending"
+                    )
+                self.history_backfill_imported_hours += (
+                    statistics_result.written_points
+                )
+                try:
+                    self.meter_register_health = assess_meter_register(
+                        self._known_readings, checked_at=dt_util.now()
+                    )
+                except Exception:  # pragma: no cover - defensive diagnostics guard
+                    _LOGGER.warning("Could not assess water-meter register health")
                 if readings:
                     earliest = min(item.timestamp.date() for item in readings)
                     if (
@@ -1162,6 +1707,10 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
         self.history_backfill_processed_chunks = self.history_backfill_total_chunks
         self.history_backfill_completed_at = dt_util.now()
         self.history_backfill_error = None
+        if not self.statistics_operation_running:
+            # Finish with one complete read-only coverage snapshot. Individual
+            # blocks were already verified before their cursors advanced.
+            await self.async_check_energy_statistics(update_listeners=False)
         async_dismiss(self.hass, self._history_notification_id)
         await self._async_save_history_state()
         self.async_update_listeners()

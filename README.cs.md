@@ -81,6 +81,29 @@ senzorů ani jejich obyčejnou historii Recorderu nikdy nemaže.
 pozastavený. Použijte ji jen tehdy, když chcete řadu Energie záměrně vyprázdnit
 před pozdější obnovou.
 
+### Bezpečná kontrola statistik Energie
+
+Verze 0.4.19 přidává do části **Diagnostika** zařízení tlačítko
+**Zkontrolovat statistiky Energie**. Jde o kontrolu pouze pro čtení: porovná
+už ověřené odečty v paměti integrace se dvěma integračními řadami Recorderu.
+Nevolá portál VS Chrudim, nic nezapisuje, nespouští doplňování historie a
+nemazá ani neobnovuje statistiky.
+
+Entita `Stav statistik Energie` používá stavy `never`, `ok`, `pending` a
+`error`. Její atributy ukazují stav kontroly (`unknown`, `ok`, `pending`,
+`incomplete` nebo `error`), bezpečné počty pokrytí, nejstarší/nejnovější
+časové značky statistik, vnitřní mezery v UTC hodinách, duplicity, monotónnost
+součtů a uložený kurzor doplňování. `Stav registru vodoměru` je pouze
+informační: nižší stav označí jako `possible_reset_or_correction`, aby jej bylo
+možné zkontrolovat bez změny osvědčeného výpočtu výměny vodoměru bez falešné
+špičky spotřeby.
+
+Pokud Recorder běžný zápis statistik dočasně nepřijme, úspěšně ověřená živá
+aktualizace vodoměru zůstane úspěšná. Integrace uloží jen malý bezpečný stav a
+stejný idempotentní zápis zkusí po dalším úspěšném načtení portálu. Blok
+historie neposune, dokud zápis statistik nebyl přijat. Automaticky nikdy
+nesmaže ani neobnoví statistiky.
+
 ## Historická data
 
 Po nastavení integrace automaticky prohledá až tři kalendářní roky zpět, včetně obou krajních dat, v 31denních blocích. Každý odečet zůstává samostatnou hodinovou statistikou; bloky pouze snižují počet požadavků na portál a data neagregují. Integrace používá stejná vlastní datumová pole ASP.NET WebForms jako WebDownloader, upřednostňuje ověřenou CSV odpověď a pokud portál nabídku exportu nezobrazí, načte vykreslenou tabulku naměřených stavů.
@@ -121,6 +144,13 @@ Diagnostické entity zobrazují:
   příznaky kvality odečtů (například pokles stavu vodoměru), které nikdy samy
   neodmítnou jinak platné stažení,
 - postup tříletého doplnění historie, počet importovaných hodin a poslední chybu (`History backfill status`).
+
+Kontrola statistik Energie a její uložený stav opakování obsahují pouze časové
+značky, počty, pevné stavy a očištěný text chyby. Neukládají odečty, CSV/HTML,
+požadavky, URL, přihlašovací údaje, údaje o odběrném místě ani identifikátory
+vodoměru. Při přechodu statistik do stavu pending/error vznikne jediné trvalé
+upozornění; po ověřeném návratu do zdravého stavu může následovat jediné
+upozornění o obnově.
 
 Volba **Označit data portálu jako zpožděná po** je nepovinná a výchozí hodnota
 `0` ji vypíná. Mění pouze diagnostický stav zdroje; starší data sama o sobě

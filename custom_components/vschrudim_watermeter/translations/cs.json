@@ -1,1 +1,64 @@
-{"config":{"step":{"user":{"title":"Připojit vodoměr VSChrudim","data":{"username":"Uživatelské jméno","password":"Heslo"}},"place":{"title":"Vyberte odběrné místo","data":{"place":"Odběrné místo"}},"reconfigure":{"title":"Upravit nastavení","data":{"scan_interval":"Interval aktualizace (minuty)","price_per_m3":"Celková cena vody (Kč/m³)","notify_unavailable":"Upozornit při nedostupnosti zdroje","failure_threshold":"Počet selhání před upozorněním","notify_missing":"Upozornit na chybějící hodinové odečty","missing_retry_attempts":"Počet pokusů o doplnění odečtů","retry_delay":"Prodleva mezi pokusy (sekundy)","source_delay_warning_hours":"Označit data portálu jako zpožděná po (hodinách; 0 = vypnuto)"}}},"error":{"invalid_auth":"Neplatné přihlašovací údaje","cannot_connect":"Nelze se připojit k portálu","no_places":"Nebylo nalezeno žádné odběrné místo","unknown":"Neočekávaná odpověď portálu"},"abort":{"already_configured":"Toto odběrné místo již je nastaveno","reauth_successful":"Opětovné přihlášení bylo úspěšné","reconfigure_successful":"Nastavení bylo aktualizováno"}},"entity":{"sensor":{"meter_state":{"name":"Stav vodoměru"},"latest_consumption":{"name":"Poslední spotřeba"},"water_price":{"name":"Cena vody"},"total_water_cost":{"name":"Celkové náklady na vodu"},"source_status":{"name":"Stav zdroje"},"data_available_through":{"name":"Data stažena do"},"latest_portal_reading":{"name":"Poslední odečet na portálu"},"missing_hourly_readings":{"name":"Chybějící hodinové odečty"},"oldest_missing_hourly_reading":{"name":"Nejstarší chybějící hodinový odečet"},"last_download_reading_count":{"name":"Počet odečtů v posledním stažení"},"duplicate_readings_merged":{"name":"Sloučené duplicitní odečty"},"missing_readings_recovered":{"name":"Doplněné chybějící odečty"},"last_update_attempt":{"name":"Poslední pokus o aktualizaci"},"history_backfill_status":{"name":"Stav doplňování historie"}},"button":{"test_download":{"name":"Otestovat stažení"},"retry_history_download":{"name":"Zkusit doplnit data"},"rebuild_energy_statistics":{"name":"Obnovit statistiky Energie"}}}}
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Připojit vodoměr VSChrudim",
+        "data": {"username": "Uživatelské jméno", "password": "Heslo"}
+      },
+      "place": {
+        "title": "Vyberte odběrné místo",
+        "data": {"place": "Odběrné místo"}
+      },
+      "reconfigure": {
+        "title": "Upravit nastavení",
+        "data": {
+          "scan_interval": "Interval aktualizace (minuty)",
+          "price_per_m3": "Celková cena vody (Kč/m³)",
+          "notify_unavailable": "Upozornit při nedostupnosti zdroje",
+          "failure_threshold": "Počet selhání před upozorněním",
+          "notify_missing": "Upozornit na chybějící hodinové odečty",
+          "missing_retry_attempts": "Počet pokusů o doplnění odečtů",
+          "retry_delay": "Prodleva mezi pokusy (sekundy)",
+          "source_delay_warning_hours": "Označit data portálu jako zpožděná po (hodinách; 0 = vypnuto)"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Neplatné přihlašovací údaje",
+      "cannot_connect": "Nelze se připojit k portálu",
+      "no_places": "Nebylo nalezeno žádné odběrné místo",
+      "unknown": "Neočekávaná odpověď portálu"
+    },
+    "abort": {
+      "already_configured": "Toto odběrné místo již je nastaveno",
+      "reauth_successful": "Opětovné přihlášení bylo úspěšné",
+      "reconfigure_successful": "Nastavení bylo aktualizováno"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "meter_state": {"name": "Stav vodoměru"},
+      "latest_consumption": {"name": "Poslední spotřeba"},
+      "water_price": {"name": "Cena vody"},
+      "total_water_cost": {"name": "Celkové náklady na vodu"},
+      "source_status": {"name": "Stav zdroje"},
+      "data_available_through": {"name": "Data stažena do"},
+      "latest_portal_reading": {"name": "Poslední odečet na portálu"},
+      "missing_hourly_readings": {"name": "Chybějící hodinové odečty"},
+      "oldest_missing_hourly_reading": {"name": "Nejstarší chybějící hodinový odečet"},
+      "last_download_reading_count": {"name": "Počet odečtů v posledním stažení"},
+      "duplicate_readings_merged": {"name": "Sloučené duplicitní odečty"},
+      "missing_readings_recovered": {"name": "Doplněné chybějící odečty"},
+      "last_update_attempt": {"name": "Poslední pokus o aktualizaci"},
+      "history_backfill_status": {"name": "Stav doplňování historie"},
+      "energy_statistics_status": {"name": "Stav statistik Energie"},
+      "meter_register_status": {"name": "Stav registru vodoměru"}
+    },
+    "button": {
+      "test_download": {"name": "Otestovat stažení"},
+      "retry_history_download": {"name": "Zkusit doplnit data"},
+      "check_energy_statistics": {"name": "Zkontrolovat statistiky Energie"},
+      "rebuild_energy_statistics": {"name": "Obnovit statistiky Energie"}
+    }
+  }
+}

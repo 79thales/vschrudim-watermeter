@@ -22,6 +22,7 @@ async def async_setup_entry(
         [
             TestDownloadButton(entry.runtime_data),
             RetryHistoryDownloadButton(entry.runtime_data),
+            CheckEnergyStatisticsButton(entry.runtime_data),
             RebuildEnergyStatisticsButton(entry.runtime_data),
         ]
     )
@@ -113,3 +114,32 @@ class RebuildEnergyStatisticsButton(ButtonEntity):
     async def async_press(self) -> None:
         """Run the validated rebuild after an explicit user button press."""
         await self.coordinator.async_rebuild_energy_statistics(confirm=True)
+
+
+class CheckEnergyStatisticsButton(ButtonEntity):
+    """Read-only comparison of portal-derived and Recorder statistics."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "check_energy_statistics"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:database-check-outline"
+
+    def __init__(self, coordinator: VsChrudimCoordinator) -> None:
+        self.coordinator = coordinator
+        identifier = coordinator.place.identifier
+        self._attr_unique_id = f"{identifier}_check_energy_statistics"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, identifier)},
+            name=coordinator.place.address or f"VS Chrudim {identifier}",
+            manufacturer="Vodárenská společnost Chrudim",
+            model="Smart water meter",
+        )
+
+    @property
+    def available(self) -> bool:
+        """Only a destructive clear/rebuild temporarily blocks this check."""
+        return not self.coordinator.statistics_operation_running
+
+    async def async_press(self) -> None:
+        """Check the current in-memory source snapshot without portal I/O."""
+        await self.coordinator.async_check_energy_statistics()

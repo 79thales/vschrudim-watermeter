@@ -10,6 +10,18 @@ from .attempts import sanitize_error_message
 async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigEntry[VsChrudimCoordinator]):
     coordinator = entry.runtime_data
     data = coordinator.data
+    energy_health = getattr(coordinator, "energy_statistics_health", None)
+    meter_health = getattr(coordinator, "meter_register_health", None)
+    energy_health_data = (
+        energy_health.as_dict()
+        if energy_health is not None and hasattr(energy_health, "as_dict")
+        else {"status": "unknown"}
+    )
+    meter_health_data = (
+        meter_health.as_dict()
+        if meter_health is not None and hasattr(meter_health, "as_dict")
+        else {"status": "normal"}
+    )
     return async_redact_data(
         {
             "entry": {
@@ -65,6 +77,35 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
                 "cost_statistic_id": coordinator.cost_statistic_id,
                 "ready": coordinator.statistics_ready,
             },
+            "energy_statistics_health": {
+                **energy_health_data,
+                "write_status": getattr(
+                    coordinator, "statistics_write_status", "never"
+                ),
+                "last_attempt_at": (
+                    coordinator.statistics_last_attempt_at.isoformat()
+                    if getattr(coordinator, "statistics_last_attempt_at", None)
+                    else None
+                ),
+                "last_success_at": (
+                    coordinator.statistics_last_success_at.isoformat()
+                    if getattr(coordinator, "statistics_last_success_at", None)
+                    else None
+                ),
+                "last_error_type": getattr(
+                    coordinator, "statistics_last_error_type", None
+                ),
+                "last_error": sanitize_error_message(
+                    getattr(coordinator, "statistics_last_error", None)
+                ),
+                "last_written_points": getattr(
+                    coordinator, "statistics_last_written_points", 0
+                ),
+                "recovery_pending": getattr(
+                    coordinator, "statistics_recovery_pending", False
+                ),
+            },
+            "meter_register_health": meter_health_data,
             "history": {
                 "status": coordinator.history_backfill_status,
                 "scan_start": coordinator.history_backfill_scan_start.isoformat()

@@ -84,6 +84,28 @@ sensor states or their ordinary Recorder history.
 the writer paused. Use it only when you intentionally want the Energy series
 empty before a later rebuild.
 
+### Checking Energy statistics safely
+
+Version 0.4.19 adds **Check Energy statistics** in the device's
+**Diagnostics** section. It is a read-only comparison of the already validated
+in-memory portal readings and the two integration-owned Recorder series. It
+does not contact VS Chrudim, write data, start a history scan, clear statistics
+or rebuild them.
+
+`Energy statistics status` reports `never`, `ok`, `pending`, or `error`. Its
+attributes show the matching health state (`unknown`, `ok`, `pending`,
+`incomplete`, or `error`), safe coverage counts, earliest/latest statistic
+timestamps, internal UTC-hour gaps, duplicate timestamps, sum monotonicity and
+the saved backfill cursor. `Meter register status` is informational only: a
+lower value is reported as `possible_reset_or_correction` so it can be
+inspected without altering the established no-spike replacement-meter logic.
+
+If Recorder cannot accept a normal statistics write, the verified live meter
+update remains successful. The integration persists only a small safe
+checkpoint and retries the same idempotent external statistics after a later
+successful portal update. A history-backfill block is not advanced until its
+statistics write is accepted. No automatic clear or rebuild is ever performed.
+
 ## Historical data
 
 After setup, the integration automatically scans up to three calendar years backwards in inclusive 31-day HTTP blocks. Every portal reading remains an individual hourly statistic; the blocks only reduce the number of requests and do not aggregate the data. The integration uses the same custom-date WebForms controls as WebDownloader, prefers the validated CSV response and falls back to the rendered measured-state table when the portal omits its export control. It validates that each non-empty result overlaps the requested range, imports only completed hours, and checkpoints progress after every block. An interrupted or failed scan resumes from its saved cursor; portal requests are serialized with normal polling and retried using the configured recovery settings.
@@ -122,6 +144,13 @@ Diagnostic entities show:
   informational reading-quality flags (for example a lower meter register),
   which never reject an otherwise valid download,
 - three-year history progress, imported-hour count and the last backfill error (`History backfill status`).
+
+The Energy-statistics health snapshot and its saved retry state contain only
+timestamps, counts, fixed status values and sanitized error text. They do not
+store readings, CSV/HTML, requests, URLs, credentials, consumption-place data
+or meter identifiers. A single persistent notification is created when Energy
+statistics become pending/error and an optional single recovery notice follows
+after a verified healthy check.
 
 `Mark portal data as delayed after` is optional and defaults to `0` (disabled).
 It only changes the source-state diagnostic and never treats old portal data as

@@ -43,6 +43,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry[VsChrudimCoo
             MissingReadingsRecoveredSensor(entry.runtime_data),
             LastUpdateAttemptSensor(entry.runtime_data),
             HistoryBackfillStatusSensor(entry.runtime_data),
+            EnergyStatisticsStatusSensor(entry.runtime_data),
+            MeterRegisterStatusSensor(entry.runtime_data),
         ]
     )
 
@@ -442,3 +444,69 @@ class HistoryBackfillStatusSensor(_BaseSensor):
             else None,
             "last_error": self.coordinator.history_backfill_error,
         }
+
+
+class EnergyStatisticsStatusSensor(_BaseSensor):
+    """Safe status of the integration-owned Energy statistic series."""
+
+    _attr_translation_key = "energy_statistics_status"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator: VsChrudimCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = (
+            f"{coordinator.place.identifier}_energy_statistics_status"
+        )
+
+    @property
+    def native_value(self) -> str:
+        return self.coordinator.statistics_write_status
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object]:
+        health = self.coordinator.energy_statistics_health
+        return {
+            "last_attempt_at": self.coordinator.statistics_last_attempt_at.isoformat()
+            if self.coordinator.statistics_last_attempt_at
+            else None,
+            "last_success_at": self.coordinator.statistics_last_success_at.isoformat()
+            if self.coordinator.statistics_last_success_at
+            else None,
+            "last_written_points": self.coordinator.statistics_last_written_points,
+            "recovery_pending": self.coordinator.statistics_recovery_pending,
+            "statistics_ready": self.coordinator.statistics_ready,
+            "health": health.as_dict(),
+            "history_backfill_status": self.coordinator.history_backfill_status,
+            "history_backfill_cursor": (
+                self.coordinator.history_backfill_cursor.isoformat()
+                if self.coordinator.history_backfill_cursor
+                else None
+            ),
+        }
+
+
+class MeterRegisterStatusSensor(_BaseSensor):
+    """Informational lower-register diagnostic with no repair side effects."""
+
+    _attr_translation_key = "meter_register_status"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator: VsChrudimCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.place.identifier}_meter_register_status"
+
+    @property
+    def native_value(self) -> str:
+        return self.coordinator.meter_register_health.status
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object]:
+        return self.coordinator.meter_register_health.as_dict()

@@ -30,6 +30,7 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
             "custom_components.vschrudim_watermeter.recovery",
             "custom_components.vschrudim_watermeter.services",
             "custom_components.vschrudim_watermeter.sensor",
+            "custom_components.vschrudim_watermeter.statistics_health",
         ):
             with self.subTest(module=module):
                 importlib.import_module(module)
@@ -406,6 +407,183 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
         asyncio.run(button.async_press())
         coordinator.async_test_download.assert_awaited_once_with()
 
+    def test_check_energy_statistics_button_has_no_portal_or_writer_side_effect(self):
+        from homeassistant.const import EntityCategory
+        from custom_components.vschrudim_watermeter.button import (
+            CheckEnergyStatisticsButton,
+        )
+
+        coordinator = SimpleNamespace(
+            place=SimpleNamespace(identifier="test", address="Test meter"),
+            statistics_operation_running=False,
+            async_check_energy_statistics=AsyncMock(),
+        )
+        button = CheckEnergyStatisticsButton(coordinator)
+
+        self.assertEqual(button.entity_category, EntityCategory.DIAGNOSTIC)
+        self.assertTrue(button.available)
+        asyncio.run(button.async_press())
+        coordinator.async_check_energy_statistics.assert_awaited_once_with()
+
+    def test_read_only_energy_check_accepts_unchanged_old_portal_data(self):
+        from custom_components.vschrudim_watermeter.coordinator import (
+            VsChrudimCoordinator,
+        )
+        from custom_components.vschrudim_watermeter.models import MeterReading
+
+        async def run_check():
+            coordinator = object.__new__(VsChrudimCoordinator)
+            coordinator._statistics_operation_lock = asyncio.Lock()
+            coordinator._known_readings = (
+                MeterReading(datetime(2025, 10, 13, 10), 100.0),
+                MeterReading(datetime(2025, 10, 13, 11), 100.25),
+            )
+            coordinator.hass = SimpleNamespace(
+                config=SimpleNamespace(time_zone="Europe/Prague")
+            )
+            coordinator.entry = SimpleNamespace(
+                entry_id="TEST", options={"price_per_m3": 120.0}
+            )
+            coordinator.statistics_write_status = "pending"
+            coordinator.statistics_recovery_pending = True
+            coordinator.statistics_last_error_type = None
+            coordinator.statistics_last_error = None
+            expected = coordinator._expected_energy_statistics(
+                coordinator._known_readings,
+                now=datetime(2026, 9, 8, 12, tzinfo=ZoneInfo("Europe/Prague")),
+            )
+            coordinator._async_read_energy_statistics = AsyncMock(
+                return_value=expected
+            )
+            coordinator._async_publish_energy_statistics_health = AsyncMock()
+            health = await coordinator.async_check_energy_statistics(
+                update_listeners=False
+            )
+            return coordinator, health
+
+        coordinator, health = asyncio.run(run_check())
+        self.assertEqual(health.status, "ok")
+        self.assertEqual(coordinator.statistics_write_status, "ok")
+        self.assertFalse(coordinator.statistics_recovery_pending)
+        self.assertEqual(
+            health.portal_latest_timestamp, datetime(2025, 10, 13, 11)
+        )
+        coordinator._async_read_energy_statistics.assert_awaited_once()
+
+    def test_statistics_writer_error_keeps_the_result_retryable(self):
+        from custom_components.vschrudim_watermeter.coordinator import (
+            VsChrudimCoordinator,
+        )
+        from custom_components.vschrudim_watermeter.models import MeterReading
+
+        async def run_import():
+            coordinator = object.__new__(VsChrudimCoordinator)
+            coordinator._statistics_writes_paused = False
+            coordinator.hass = SimpleNamespace(
+                config=SimpleNamespace(time_zone="Europe/Prague")
+            )
+            coordinator.entry = SimpleNamespace(
+                entry_id="TEST", options={"price_per_m3": 120.0}
+            )
+            coordinator.statistics_last_attempt_at = None
+            coordinator.statistics_last_success_at = None
+            coordinator.statistics_last_written_points = 0
+            coordinator.statistics_write_status = "never"
+            coordinator.statistics_recovery_pending = False
+            coordinator.statistics_last_error_type = None
+            coordinator.statistics_last_error = None
+            coordinator._async_statistics_seed = AsyncMock(
+                side_effect=RuntimeError("token=private-token")
+            )
+            coordinator._async_publish_energy_statistics_health = AsyncMock()
+            return coordinator, await coordinator._async_import_readings(
+                (MeterReading(datetime(2026, 1, 1, 10), 100.0),)
+            )
+
+        coordinator, result = asyncio.run(run_import())
+        self.assertFalse(result.accepted)
+        self.assertEqual(coordinator.statistics_write_status, "error")
+        self.assertTrue(coordinator.statistics_recovery_pending)
+        self.assertNotIn("private-token", coordinator.statistics_last_error or "")
+
+    def test_backfill_cursor_does_not_advance_after_statistics_write_failure(self):
+        from custom_components.vschrudim_watermeter.coordinator import (
+            VsChrudimCoordinator,
+        )
+        from custom_components.vschrudim_watermeter.models import MeterReading
+        from custom_components.vschrudim_watermeter.statistics_health import (
+            StatisticsImportResult,
+        )
+
+        async def run_backfill():
+            coordinator = object.__new__(VsChrudimCoordinator)
+            coordinator._api_lock = asyncio.Lock()
+            coordinator.client = SimpleNamespace(
+                async_get_history=AsyncMock(
+                    return_value=(MeterReading(datetime(2026, 1, 1, 10), 100.0),)
+                )
+            )
+            coordinator.place = SimpleNamespace()
+            coordinator.entry = SimpleNamespace(options={})
+            coordinator._known_readings = ()
+            coordinator.history_backfill_scan_start = datetime(2026, 1, 1).date()
+            coordinator.history_backfill_cursor = datetime(2026, 1, 1).date()
+            coordinator.history_earliest_date = None
+            coordinator.history_backfill_imported_hours = 0
+            coordinator.history_backfill_processed_chunks = 0
+            coordinator._async_save_history_state = AsyncMock()
+            coordinator._async_import_readings = AsyncMock(
+                return_value=StatisticsImportResult(
+                    accepted=False,
+                    error="Energy statistics write was not verified",
+                )
+            )
+            coordinator._async_fail_history_backfill = AsyncMock()
+            await coordinator._async_backfill_history()
+            return coordinator
+
+        coordinator = asyncio.run(run_backfill())
+        self.assertEqual(
+            coordinator.history_backfill_cursor, datetime(2026, 1, 1).date()
+        )
+        self.assertEqual(coordinator.history_backfill_imported_hours, 0)
+        coordinator._async_fail_history_backfill.assert_awaited_once()
+
+    def test_statistics_state_store_load_is_tolerant_and_does_not_keep_readings(self):
+        from custom_components.vschrudim_watermeter.coordinator import (
+            VsChrudimCoordinator,
+        )
+
+        class Store:
+            async def async_load(self):
+                return {
+                    "status": "pending",
+                    "last_attempt_at": "2026-09-08T10:00:00+02:00",
+                    "last_error": "token=private-token",
+                    "last_written_points": 42,
+                    "recovery_pending": True,
+                    "health_status": "incomplete",
+                    "readings": [{"private": "must be ignored"}],
+                }
+
+        coordinator = object.__new__(VsChrudimCoordinator)
+        coordinator._statistics_state_store = Store()
+        coordinator.statistics_write_status = "never"
+        coordinator.statistics_last_attempt_at = None
+        coordinator.statistics_last_success_at = None
+        coordinator.statistics_last_error_type = None
+        coordinator.statistics_last_error = None
+        coordinator.statistics_last_written_points = 0
+        coordinator.statistics_recovery_pending = False
+        coordinator.energy_statistics_health = SimpleNamespace()
+
+        asyncio.run(coordinator._async_load_statistics_state())
+
+        self.assertEqual(coordinator.statistics_write_status, "pending")
+        self.assertEqual(coordinator.statistics_last_written_points, 42)
+        self.assertTrue(coordinator.statistics_recovery_pending)
+        self.assertNotIn("private-token", coordinator.statistics_last_error or "")
+
     def test_download_test_fetches_without_importing_or_starting_backfill(self):
         from custom_components.vschrudim_watermeter.coordinator import (
             VsChrudimCoordinator,
@@ -642,6 +820,10 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
         from custom_components.vschrudim_watermeter.diagnostics import (
             async_get_config_entry_diagnostics,
         )
+        from custom_components.vschrudim_watermeter.statistics_health import (
+            EnergyStatisticsHealth,
+            MeterRegisterHealth,
+        )
 
         older = DownloadAttempt(
             started_at="2026-01-01T10:00:00+01:00",
@@ -679,6 +861,19 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
             consumption_statistic_id="vschrudim_watermeter:example_water_consumption",
             cost_statistic_id="vschrudim_watermeter:example_water_cost",
             statistics_ready=True,
+            statistics_write_status="error",
+            statistics_last_attempt_at=None,
+            statistics_last_success_at=None,
+            statistics_last_error_type="RuntimeError",
+            statistics_last_error="token=credential-token-73921",
+            statistics_last_written_points=0,
+            statistics_recovery_pending=True,
+            energy_statistics_health=EnergyStatisticsHealth(
+                status="error",
+                error_type="RuntimeError",
+                error="https://example.invalid/private?token=credential-token-73921",
+            ),
+            meter_register_health=MeterRegisterHealth(),
             history_backfill_status="completed",
             history_backfill_scan_start=None,
             history_backfill_cursor=None,
@@ -709,4 +904,12 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
         self.assertEqual(diagnostics["last_portal_page_features"], ["html_table"])
         self.assertEqual(
             diagnostics["last_reading_quality_flags"], ["meter_state_decreased"]
+        )
+        statistics_health = diagnostics["energy_statistics_health"]
+        self.assertEqual(statistics_health["write_status"], "error")
+        self.assertNotIn(
+            "credential-token-73921", statistics_health["last_error"] or ""
+        )
+        self.assertNotIn(
+            "example.invalid", statistics_health["error"] or ""
         )

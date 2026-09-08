@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.19 - 2026-09-08
+
+- Add a read-only, persistent health check for the two integration-owned
+  external Energy statistics. It compares only completed portal-derived hourly
+  points with Recorder, reports safe coverage/count/gap/duplicate/monotonic
+  diagnostics, and never treats an old or unchanged portal timestamp as a
+  failure.
+- Add device diagnostics for **Energy statistics status** and **Meter register
+  status**, plus a non-destructive **Check Energy statistics** button. The
+  check performs no portal request, statistics write, history scan, clear or
+  rebuild.
+- Store only a bounded safe statistics checkpoint so an interrupted Recorder
+  write is retried idempotently after a later successful portal update. A
+  failed statistics write no longer advances the affected history-backfill
+  cursor or invalidates the live water-meter update.
+- Add transition-based Energy-statistics notifications and an informational
+  lower-register diagnostic. Neither changes the existing meter replacement
+  baseline or normal consumption calculation.
+
 ## 0.4.18 - 2026-09-08
 
 - Keep portal transfers serialized, retain the single safe re-login replay for
