@@ -90,6 +90,18 @@ After setup, the integration automatically scans up to three calendar years back
 
 Only progress dates and counters are stored in the integration's `.storage` record. Customer readings are written to Home Assistant's Recorder statistics and are not duplicated in the progress store.
 
+Use **Retry history download** in the device's **Diagnostics** section to
+request an immediate portal update and then resume a saved backfill or start a
+new reconciliation of the available hourly history. It is not **Rebuild Energy
+statistics**: the retry does not delete any statistics or live-sensor history.
+`Data available through` always reports the latest timestamp actually returned
+by VS Chrudim; the integration does not assume an allowed portal delay.
+
+Repeated portal responses are merged by timestamp, with a corrected value
+replacing the older value at that timestamp. The external-statistics builders
+also produce a single point per completed hour under the integration-owned
+statistic IDs, so retrying does not create a second statistic series.
+
 Diagnostic entities show:
 
 - the newest timestamp contained in the latest successful portal download (`Data available through`),

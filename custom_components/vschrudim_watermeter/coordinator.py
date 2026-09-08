@@ -623,6 +623,44 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
         """Return whether a clear or rebuild operation is in progress."""
         return self._statistics_operation_lock.locked()
 
+    @property
+    def history_backfill_running(self) -> bool:
+        """Return whether a historical download is already in progress."""
+        return bool(
+            self._history_backfill_task
+            and not self._history_backfill_task.done()
+        )
+
+    async def async_retry_history_download(self) -> None:
+        """Retry the current portal download and reconcile available history.
+
+        This deliberately does not clear or rebuild Energy statistics. Every
+        returned reading is merged by timestamp and the statistics builders
+        emit one external statistic per hour, so a repeated retry is safe.
+        """
+        if self.statistics_operation_running:
+            raise HomeAssistantError(
+                "Energy statistics maintenance is already in progress"
+            )
+        if self.history_backfill_running:
+            raise HomeAssistantError("Water-meter history download is already running")
+
+        # Make the live reading and "Data available through" diagnostic fresh
+        # before scheduling the longer, resumable history reconciliation.
+        await self.async_request_refresh()
+        if self.last_attempt_result != "success":
+            raise HomeAssistantError(
+                self.last_attempt_error or "The portal data download failed"
+            )
+
+        # A successful regular update auto-resumes a paused/failed backfill.
+        # Let that callback run first; it is the same task the button requests.
+        await asyncio.sleep(0)
+        if self.history_backfill_running:
+            return
+        if not self.async_start_history_backfill():
+            raise HomeAssistantError("Water-meter history download could not start")
+
     def async_start_history_backfill(self, resume_only: bool = False) -> bool:
         """Start or resume the bounded three-year history scan."""
         if self._history_backfill_task and not self._history_backfill_task.done():

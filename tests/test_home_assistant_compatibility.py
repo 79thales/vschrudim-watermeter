@@ -7,7 +7,7 @@ import asyncio
 from datetime import datetime
 from types import SimpleNamespace
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 from zoneinfo import ZoneInfo
 
 HOME_ASSISTANT_INSTALLED = importlib.util.find_spec("homeassistant") is not None
@@ -203,6 +203,50 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
         coordinator.async_rebuild_energy_statistics.assert_awaited_once_with(
             confirm=True
         )
+
+    def test_retry_history_button_does_not_rebuild_statistics(self):
+        from homeassistant.const import EntityCategory
+        from custom_components.vschrudim_watermeter.button import (
+            RetryHistoryDownloadButton,
+        )
+
+        coordinator = SimpleNamespace(
+            place=SimpleNamespace(identifier="test", address="Test meter"),
+            history_backfill_running=False,
+            statistics_operation_running=False,
+            async_retry_history_download=AsyncMock(),
+        )
+        button = RetryHistoryDownloadButton(coordinator)
+
+        self.assertEqual(button.entity_category, EntityCategory.DIAGNOSTIC)
+        self.assertTrue(button.available)
+        asyncio.run(button.async_press())
+        coordinator.async_retry_history_download.assert_awaited_once_with()
+
+    def test_retry_history_download_refreshes_before_starting_backfill(self):
+        from custom_components.vschrudim_watermeter.coordinator import (
+            VsChrudimCoordinator,
+        )
+
+        class Lock:
+            @staticmethod
+            def locked():
+                return False
+
+        async def refresh():
+            coordinator.last_attempt_result = "success"
+
+        coordinator = object.__new__(VsChrudimCoordinator)
+        coordinator._statistics_operation_lock = Lock()
+        coordinator._history_backfill_task = None
+        coordinator.last_attempt_result = "never"
+        coordinator.last_attempt_error = None
+        coordinator.async_request_refresh = refresh
+        coordinator.async_start_history_backfill = Mock(return_value=True)
+
+        asyncio.run(coordinator.async_retry_history_download())
+
+        coordinator.async_start_history_backfill.assert_called_once_with()
 
     def test_download_attempt_records_success_and_failure(self):
         from custom_components.vschrudim_watermeter.attempts import DownloadAttempt

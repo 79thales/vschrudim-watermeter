@@ -35,6 +35,14 @@ class RecoveryTests(unittest.TestCase):
         self.assertEqual([row.meter_state_m3 for row in merged], [10, 10.1, 10.25])
         self.assertEqual(recovery.find_missing_hours(merged), ())
 
+    def test_repeated_history_retry_has_one_reading_per_timestamp(self):
+        original = (self.reading(0, 10), self.reading(1, 10.1))
+        repeated = (self.reading(0, 10), self.reading(1, 10.15))
+        merged = recovery.merge_readings(original, repeated, repeated)
+
+        self.assertEqual(len(merged), 2)
+        self.assertEqual([row.meter_state_m3 for row in merged], [10, 10.15])
+
     def test_czech_spring_dst_gap_is_not_reported(self):
         readings = (
             models.MeterReading(datetime(2026, 3, 29, 1), 10),

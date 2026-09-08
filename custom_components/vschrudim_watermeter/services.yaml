@@ -37,3 +37,17 @@ rebuild_energy_statistics:
       required: true
       selector:
         boolean:
+
+retry_history_download:
+  name: Retry history download
+  description: >-
+    Immediately download the current portal data and then resume a saved
+    history scan or start a new idempotent reconciliation. This does not clear
+    or rebuild Energy statistics.
+  fields:
+    entry_id:
+      name: Config entry ID
+      description: The VSChrudim watermeter config entry to update.
+      required: true
+      selector:
+        text:

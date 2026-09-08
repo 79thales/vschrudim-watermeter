@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.11 - 2026-09-08
+
+- Add a separate device button and action to immediately retry the portal
+  download and resume or restart the idempotent history reconciliation.
+- Keep the retry entirely separate from the destructive Energy-statistics
+  rebuild; it never clears statistics or the live sensor history.
+- Deduplicate repeated portal readings by timestamp before creating the single
+  external statistic for each hour.
+
 ## 0.4.10 - 2026-09-08
 
 - Reuse the portal's already selected reporting context when the consumption-

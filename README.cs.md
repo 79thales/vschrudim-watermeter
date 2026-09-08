@@ -89,6 +89,18 @@ Každý neprázdný výsledek ověřuje podle překryvu s požadovaným obdobím
 
 Do záznamu `.storage` integrace se ukládají pouze data postupu a počitadla. Odečty zákazníka se zapisují do Recorder statistik Home Assistantu a v záznamu postupu se neduplikují.
 
+V části **Diagnostika** zařízení použijte tlačítko **Zkusit doplnit data**.
+Vyvolá okamžitou aktualizaci portálu a potom obnoví uložené doplňování nebo
+spustí nový idempotentní průchod dostupnou hodinovou historií. Nejde o tlačítko
+**Obnovit statistiky Energie**: pokus nemaže statistiky ani běžnou historii
+živých senzorů. `Data stažena do` vždy ukazuje nejnovější čas skutečně vrácený
+portálem VS Chrudim; integrace nepředpokládá žádnou maximální přípustnou prodlevu.
+
+Opakované odpovědi portálu se spojují podle časové značky; opravená hodnota
+nahradí starší hodnotu stejného času. Zapisovače externích statistik navíc
+vytvoří pro každou dokončenou hodinu jediný bod pod integračními ID statistik,
+takže opakovaný pokus nevytvoří druhou statistickou řadu.
+
 Diagnostické entity zobrazují:
 
 - nejnovější časovou značku obsaženou v posledním úspěšném stažení (`Data available through`),

@@ -17,8 +17,45 @@ async def async_setup_entry(
     entry: ConfigEntry[VsChrudimCoordinator],
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the confirmed Energy-statistics rebuild button."""
-    async_add_entities([RebuildEnergyStatisticsButton(entry.runtime_data)])
+    """Set up independent data-download and statistics-maintenance buttons."""
+    async_add_entities(
+        [
+            RetryHistoryDownloadButton(entry.runtime_data),
+            RebuildEnergyStatisticsButton(entry.runtime_data),
+        ]
+    )
+
+
+class RetryHistoryDownloadButton(ButtonEntity):
+    """Request an immediate, idempotent retry of portal data download."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "retry_history_download"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:cloud-download-outline"
+
+    def __init__(self, coordinator: VsChrudimCoordinator) -> None:
+        self.coordinator = coordinator
+        identifier = coordinator.place.identifier
+        self._attr_unique_id = f"{identifier}_retry_history_download"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, identifier)},
+            name=coordinator.place.address or f"VS Chrudim {identifier}",
+            manufacturer="Vodárenská společnost Chrudim",
+            model="Smart water meter",
+        )
+
+    @property
+    def available(self) -> bool:
+        """Do not overlap history transfer or destructive statistics work."""
+        return (
+            not self.coordinator.history_backfill_running
+            and not self.coordinator.statistics_operation_running
+        )
+
+    async def async_press(self) -> None:
+        """Download current data, then resume or restart history reconciliation."""
+        await self.coordinator.async_retry_history_download()
 
 
 class RebuildEnergyStatisticsButton(ButtonEntity):

@@ -11,6 +11,7 @@ from .const import DOMAIN
 
 SERVICE_CLEAR_ENERGY_STATISTICS = "clear_energy_statistics"
 SERVICE_REBUILD_ENERGY_STATISTICS = "rebuild_energy_statistics"
+SERVICE_RETRY_HISTORY_DOWNLOAD = "retry_history_download"
 
 _SERVICE_SCHEMA = vol.Schema(
     {
@@ -18,6 +19,8 @@ _SERVICE_SCHEMA = vol.Schema(
         vol.Required("confirm"): cv.boolean,
     }
 )
+
+_RETRY_HISTORY_SCHEMA = vol.Schema({vol.Required("entry_id"): cv.string})
 
 
 async def _coordinator_for_call(hass: HomeAssistant, call: ServiceCall):
@@ -32,6 +35,20 @@ async def _coordinator_for_call(hass: HomeAssistant, call: ServiceCall):
 
 async def async_setup_services(hass: HomeAssistant) -> None:
     """Register global handlers once; they resolve the requested entry at call time."""
+    async def retry_history_download(call: ServiceCall) -> None:
+        entry = hass.config_entries.async_get_entry(call.data["entry_id"])
+        if entry is None or entry.domain != DOMAIN or entry.runtime_data is None:
+            raise HomeAssistantError("The requested VSChrudim config entry is not loaded")
+        await entry.runtime_data.async_retry_history_download()
+
+    if not hass.services.has_service(DOMAIN, SERVICE_RETRY_HISTORY_DOWNLOAD):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_RETRY_HISTORY_DOWNLOAD,
+            retry_history_download,
+            schema=_RETRY_HISTORY_SCHEMA,
+        )
+
     if hass.services.has_service(DOMAIN, SERVICE_CLEAR_ENERGY_STATISTICS):
         return
 
