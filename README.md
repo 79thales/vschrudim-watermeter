@@ -148,9 +148,9 @@ Diagnostic entities show:
 The Energy-statistics health snapshot and its saved retry state contain only
 timestamps, counts, fixed status values and sanitized error text. They do not
 store readings, CSV/HTML, requests, URLs, credentials, consumption-place data
-or meter identifiers. A single persistent notification is created when Energy
-statistics become pending/error and an optional single recovery notice follows
-after a verified healthy check.
+or meter identifiers. Energy-statistics health is intentionally shown only in
+the device diagnostics and downloaded diagnostics; it never creates a
+persistent notification.
 
 `Mark portal data as delayed after` is optional and defaults to `0` (disabled).
 It only changes the source-state diagnostic and never treats old portal data as

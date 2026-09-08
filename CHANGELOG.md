@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.20 - 2026-09-08
+
+- Keep Energy-statistics health visible in the device diagnostics and its
+  read-only check, but do not create persistent notifications for pending,
+  incomplete, failed or recovered Energy statistics. Upgrading dismisses the
+  notification created by 0.4.19 after the next health publication.
+
 ## 0.4.19 - 2026-09-08
 
 - Add a read-only, persistent health check for the two integration-owned

@@ -425,6 +425,36 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
         asyncio.run(button.async_press())
         coordinator.async_check_energy_statistics.assert_awaited_once_with()
 
+    def test_energy_statistics_health_does_not_create_a_notification(self):
+        from custom_components.vschrudim_watermeter import coordinator as module
+        from custom_components.vschrudim_watermeter.coordinator import (
+            VsChrudimCoordinator,
+        )
+        from custom_components.vschrudim_watermeter.statistics_health import (
+            EnergyStatisticsHealth,
+        )
+
+        coordinator = object.__new__(VsChrudimCoordinator)
+        coordinator.hass = SimpleNamespace()
+        coordinator.entry = SimpleNamespace(entry_id="test")
+        coordinator._statistics_problem_notification_active = True
+        coordinator._async_save_notification_state = AsyncMock()
+
+        with (
+            patch.object(module, "async_create") as create,
+            patch.object(module, "async_dismiss") as dismiss,
+        ):
+            asyncio.run(
+                coordinator._handle_energy_statistics_notification(
+                    EnergyStatisticsHealth(status="incomplete")
+                )
+            )
+
+        create.assert_not_called()
+        self.assertEqual(dismiss.call_count, 2)
+        self.assertFalse(coordinator._statistics_problem_notification_active)
+        coordinator._async_save_notification_state.assert_awaited_once_with()
+
     def test_read_only_energy_check_accepts_unchanged_old_portal_data(self):
         from custom_components.vschrudim_watermeter.coordinator import (
             VsChrudimCoordinator,

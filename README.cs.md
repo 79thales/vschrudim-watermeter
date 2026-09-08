@@ -148,9 +148,8 @@ Diagnostické entity zobrazují:
 Kontrola statistik Energie a její uložený stav opakování obsahují pouze časové
 značky, počty, pevné stavy a očištěný text chyby. Neukládají odečty, CSV/HTML,
 požadavky, URL, přihlašovací údaje, údaje o odběrném místě ani identifikátory
-vodoměru. Při přechodu statistik do stavu pending/error vznikne jediné trvalé
-upozornění; po ověřeném návratu do zdravého stavu může následovat jediné
-upozornění o obnově.
+vodoměru. Stav statistik Energie je záměrně viditelný pouze v diagnostice
+zařízení a ve stažené diagnostice; trvalé upozornění nevytváří.
 
 Volba **Označit data portálu jako zpožděná po** je nepovinná a výchozí hodnota
 `0` ji vypíná. Mění pouze diagnostický stav zdroje; starší data sama o sobě

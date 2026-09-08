@@ -489,49 +489,20 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
             await self._async_save_notification_state()
 
     async def _handle_energy_statistics_notification(
-        self, health: EnergyStatisticsHealth
+        self, _health: EnergyStatisticsHealth
     ) -> None:
-        """Notify once when the integration-owned series needs attention.
+        """Keep Energy-statistics health visible without persistent alerts.
 
-        The message intentionally contains only a state and safe counters. It
-        never exposes a statistic ID, portal response, customer details or a
-        raw Recorder error.
+        A coverage mismatch is useful diagnostic information, but it neither
+        invalidates a live portal update nor needs to interrupt the user.
+        Dismiss notifications created by 0.4.19 so upgrading removes the
+        stale alert on the next health publication. The state remains fully
+        available in the diagnostic entity and downloaded diagnostics.
         """
-        previous_problem_active = self._statistics_problem_notification_active
-        problem = health.status in {"pending", "incomplete", "error"}
-        if problem:
-            if not self._statistics_problem_notification_active:
-                async_dismiss(self.hass, self._statistics_recovered_notification_id)
-                message = (
-                    "VSChrudim Energy statistics need attention. "
-                    f"Status: {health.status}; missing consumption points: "
-                    f"{health.missing_consumption_points}; missing cost points: "
-                    f"{health.missing_cost_points}."
-                )
-                if health.error:
-                    message += f" Last error: {health.error}"
-                async_create(
-                    self.hass,
-                    message,
-                    title="VSChrudim watermeter – Energy statistics pending",
-                    notification_id=self._statistics_notification_id,
-                )
-                self._statistics_problem_notification_active = True
-        else:
-            async_dismiss(self.hass, self._statistics_notification_id)
-            if health.status == "ok" and self._statistics_problem_notification_active:
-                async_create(
-                    self.hass,
-                    "VSChrudim Energy statistics were verified successfully again.",
-                    title="VSChrudim watermeter – Energy statistics restored",
-                    notification_id=self._statistics_recovered_notification_id,
-                )
-                self._statistics_problem_notification_active = False
-            elif health.status == "unknown":
-                # No completed portal hour is not a problem and must not
-                # create a stale alert on a fresh installation.
-                self._statistics_problem_notification_active = False
-        if previous_problem_active != self._statistics_problem_notification_active:
+        async_dismiss(self.hass, self._statistics_notification_id)
+        async_dismiss(self.hass, self._statistics_recovered_notification_id)
+        if self._statistics_problem_notification_active:
+            self._statistics_problem_notification_active = False
             await self._async_save_notification_state()
 
     async def _async_update_data(self) -> WaterMeterData:
