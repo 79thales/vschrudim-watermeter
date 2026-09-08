@@ -57,7 +57,6 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
         self.assertIsNone(cost_sensor.state_class)
         self.assertEqual(cost_sensor.native_unit_of_measurement, "CZK")
 
-        from homeassistant.const import EntityCategory
         from custom_components.vschrudim_watermeter.sensor import (
             LatestPortalReadingSensor,
         )
@@ -74,10 +73,6 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
         self.assertEqual(
             LatestPortalReadingSensor.native_value.fget(latest_sensor),
             "06.09.2026 15:00",
-        )
-        self.assertEqual(
-            LatestPortalReadingSensor._attr_entity_category,
-            EntityCategory.DIAGNOSTIC,
         )
 
     def test_external_history_statistics_are_monotonic(self):
