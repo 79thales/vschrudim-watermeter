@@ -177,6 +177,78 @@ class MeasuredStatesNavigationTests(unittest.IsolatedAsyncioTestCase):
             [("GET", api.PLACES_URL), ("GET", api.READINGS_URL)],
         )
 
+    async def test_reauthenticates_once_and_replays_full_download_after_expiry(self):
+        client = api.VsChrudimClient(object(), "user", "password")
+        client._logged_in = True
+        download_attempts = 0
+        fresh_logins = 0
+
+        async def fresh_login():
+            nonlocal fresh_logins
+            fresh_logins += 1
+            client._logged_in = True
+
+        async def download_once(_place):
+            nonlocal download_attempts
+            download_attempts += 1
+            if download_attempts == 1:
+                client._logged_in = False
+                raise api.VsChrudimAuthError("Authenticated session expired")
+            return "downloaded"
+
+        client.async_login = fresh_login
+        client._async_get_data_once = download_once
+
+        self.assertEqual(await client.async_get_data(self._place()), "downloaded")
+        self.assertEqual(download_attempts, 2)
+        self.assertEqual(fresh_logins, 1)
+
+    async def test_does_not_loop_when_session_expires_again_after_fresh_login(self):
+        client = api.VsChrudimClient(object(), "user", "password")
+        client._logged_in = True
+        download_attempts = 0
+        fresh_logins = 0
+
+        async def fresh_login():
+            nonlocal fresh_logins
+            fresh_logins += 1
+            client._logged_in = True
+
+        async def download_once(_place):
+            nonlocal download_attempts
+            download_attempts += 1
+            raise api.VsChrudimAuthError("Authenticated session expired")
+
+        client.async_login = fresh_login
+        client._async_get_data_once = download_once
+
+        with self.assertRaisesRegex(api.VsChrudimAuthError, "session expired"):
+            await client.async_get_data(self._place())
+
+        self.assertEqual(download_attempts, 2)
+        self.assertEqual(fresh_logins, 1)
+
+    async def test_rejected_fresh_login_is_not_retried_as_a_session_expiry(self):
+        client = api.VsChrudimClient(object(), "user", "password")
+        client._logged_in = True
+        fresh_logins = 0
+
+        async def rejected_login():
+            nonlocal fresh_logins
+            fresh_logins += 1
+            raise api.VsChrudimAuthError("The portal rejected the supplied credentials")
+
+        async def expired_download(_place):
+            raise api.VsChrudimAuthError("Authenticated session expired")
+
+        client.async_login = rejected_login
+        client._async_get_data_once = expired_download
+
+        with self.assertRaisesRegex(api.VsChrudimAuthError, "rejected"):
+            await client.async_get_data(self._place())
+
+        self.assertEqual(fresh_logins, 1)
+
     async def test_missing_grid_does_not_reuse_unverified_place_context(self):
         client = api.VsChrudimClient(object(), "user", "password")
 

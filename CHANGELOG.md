@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.12 - 2026-09-08
+
+- Automatically establish one fresh authenticated portal session and replay
+  the complete request when an existing session expires.
+- Preserve normal Home Assistant reauthentication for rejected credentials and
+  surface a second expired-session response instead of retrying indefinitely.
+
 ## 0.4.11 - 2026-09-08
 
 - Add a separate device button and action to immediately retry the portal

@@ -11,7 +11,8 @@ from datetime import date, datetime
 from html import unescape
 from html.parser import HTMLParser
 import re
-from typing import Final
+from collections.abc import Awaitable, Callable
+from typing import Final, TypeVar
 import unicodedata
 from urllib.parse import urljoin
 
@@ -27,6 +28,7 @@ from .models import (
 )
 
 _DATE_FORMATS: Final = ("%d.%m.%Y %H:%M", "%d.%m.%Y %H:%M:%S", "%d.%m.%Y")
+_ResultT = TypeVar("_ResultT")
 
 class VsChrudimError(Exception):
     """Base portal error."""
@@ -644,6 +646,8 @@ class VsChrudimClient:
         self._logged_in = False
 
     async def async_login(self) -> None:
+        # Do not leave a stale success flag behind if a fresh login is rejected.
+        self._logged_in = False
         html, url = await self._request_text("GET", BASE_URL)
         form = _parse_form(html)
         user_name, password_name, submit_name = _login_field_names(form)
@@ -657,6 +661,9 @@ class VsChrudimClient:
 
     async def async_get_places(self) -> list[ConsumptionPlace]:
         await self._ensure_login()
+        return await self._async_retry_expired_session(self._async_get_places_once)
+
+    async def _async_get_places_once(self) -> list[ConsumptionPlace]:
         html, _ = await self._request_text("GET", PLACES_URL)
         if self._looks_like_login(html):
             self._logged_in = False
@@ -666,6 +673,11 @@ class VsChrudimClient:
     async def async_get_data(self, place: ConsumptionPlace) -> WaterMeterData:
         """Select a place then follow its actual 'Naměřené stavy' menu link/postback."""
         await self._ensure_login()
+        return await self._async_retry_expired_session(
+            lambda: self._async_get_data_once(place)
+        )
+
+    async def _async_get_data_once(self, place: ConsumptionPlace) -> WaterMeterData:
         html, url = await self._request_text("GET", PLACES_URL)
         selected_html, selected_url = await self._select_place(html, url, place)
         readings_html, readings_url = await self._open_measured_states(selected_html, selected_url)
@@ -689,6 +701,16 @@ class VsChrudimClient:
         if date_to < date_from:
             raise ValueError("date_to must not precede date_from")
         await self._ensure_login()
+        return await self._async_retry_expired_session(
+            lambda: self._async_get_history_once(place, date_from, date_to)
+        )
+
+    async def _async_get_history_once(
+        self,
+        place: ConsumptionPlace,
+        date_from: date,
+        date_to: date,
+    ) -> tuple[MeterReading, ...]:
         html, url = await self._request_text("GET", PLACES_URL)
         selected_html, selected_url = await self._select_place(html, url, place)
         readings_html, readings_url = await self._open_measured_states(
@@ -744,6 +766,24 @@ class VsChrudimClient:
     async def _ensure_login(self) -> None:
         if not self._logged_in:
             await self.async_login()
+
+    async def _async_retry_expired_session(
+        self,
+        request: Callable[[], Awaitable[_ResultT]],
+    ) -> _ResultT:
+        """Refresh an expired portal session once and replay the full request.
+
+        The initial login is deliberately outside this helper: an invalid
+        username or password must reach Home Assistant as a normal reauth
+        error, rather than be retried. A second expired-session response is
+        likewise propagated so portal failures cannot loop indefinitely.
+        """
+        try:
+            return await request()
+        except VsChrudimAuthError:
+            self._logged_in = False
+            await self.async_login()
+            return await request()
 
     async def _select_place(self, html: str, url: str, place: ConsumptionPlace) -> tuple[str, str]:
         if self._looks_like_login(html):
