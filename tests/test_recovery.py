@@ -43,6 +43,12 @@ class RecoveryTests(unittest.TestCase):
         self.assertEqual(len(merged), 2)
         self.assertEqual([row.meter_state_m3 for row in merged], [10, 10.15])
 
+    def test_counts_timestamp_collisions_collapsed_by_merge(self):
+        original = (self.reading(0, 10), self.reading(1, 10.1))
+        repeated = (self.reading(0, 10.05), self.reading(1, 10.15))
+
+        self.assertEqual(recovery.count_duplicate_readings(original, repeated), 2)
+
     def test_czech_spring_dst_gap_is_not_reported(self):
         readings = (
             models.MeterReading(datetime(2026, 3, 29, 1), 10),

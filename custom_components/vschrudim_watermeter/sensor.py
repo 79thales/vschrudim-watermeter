@@ -9,8 +9,22 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 from .calculation import total_cost
-from .const import CONF_PRICE_PER_M3, DEFAULT_PRICE_PER_M3, DOMAIN
+from .const import (
+    CONF_PRICE_PER_M3,
+    CONF_SOURCE_DELAY_WARNING_HOURS,
+    DEFAULT_PRICE_PER_M3,
+    DEFAULT_SOURCE_DELAY_WARNING_HOURS,
+    DOMAIN,
+)
 from .coordinator import VsChrudimCoordinator
+
+_DOWNLOAD_METHOD_LABELS = {
+    "csv_link": "CSV link",
+    "csv_postback": "WebForms postback",
+    "csv_submit": "WebForms submit",
+    "html_table": "HTML table",
+    "unknown": "Unknown",
+}
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry[VsChrudimCoordinator], async_add_entities: AddEntitiesCallback) -> None:
     async_add_entities(
@@ -19,8 +33,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry[VsChrudimCoo
             LatestConsumptionSensor(entry.runtime_data),
             WaterPriceSensor(entry.runtime_data, entry),
             TotalWaterCostSensor(entry.runtime_data, entry),
+            SourceStatusSensor(entry.runtime_data),
             DataAvailableThroughSensor(entry.runtime_data),
             LatestPortalReadingSensor(entry.runtime_data),
+            MissingHourlyReadingsSensor(entry.runtime_data),
+            OldestMissingHourlyReadingSensor(entry.runtime_data),
+            LastDownloadReadingCountSensor(entry.runtime_data),
+            DuplicateReadingsMergedSensor(entry.runtime_data),
+            MissingReadingsRecoveredSensor(entry.runtime_data),
             LastUpdateAttemptSensor(entry.runtime_data),
             HistoryBackfillStatusSensor(entry.runtime_data),
         ]
@@ -141,6 +161,48 @@ class TotalWaterCostSensor(_BaseSensor):
         return total_cost(data.readings[-1].meter_state_m3, price)
 
 
+class SourceStatusSensor(_BaseSensor):
+    """One concise diagnostic state for portal reachability and freshness."""
+
+    _attr_translation_key = "source_status"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator: VsChrudimCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.place.identifier}_source_status"
+
+    @property
+    def native_value(self) -> str:
+        return self.coordinator.source_status
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object]:
+        source = self.coordinator.last_download_source
+        return {
+            "last_success_at": self.coordinator.last_success_at.isoformat()
+            if self.coordinator.last_success_at
+            else None,
+            "download_source": source,
+            "download_method": _DOWNLOAD_METHOD_LABELS.get(source, "Unknown"),
+            "latest_portal_timestamp": self.coordinator.last_download_latest_timestamp.isoformat()
+            if self.coordinator.last_download_latest_timestamp
+            else None,
+            "delay_warning_hours": self.coordinator.entry.options.get(
+                CONF_SOURCE_DELAY_WARNING_HOURS,
+                DEFAULT_SOURCE_DELAY_WARNING_HOURS,
+            ),
+            "last_test_at": self.coordinator.last_test_download_at.isoformat()
+            if self.coordinator.last_test_download_at
+            else None,
+            "last_test_result": self.coordinator.last_test_download_result,
+            "last_test_error": self.coordinator.last_test_download_error,
+        }
+
+    @property
+    def available(self) -> bool:
+        return True
+
+
 class DataAvailableThroughSensor(_BaseSensor):
     """Newest portal timestamp contained in the successful download."""
 
@@ -196,6 +258,113 @@ class LatestPortalReadingSensor(_BaseSensor):
                 tzinfo=local_tz
             ).isoformat()
         }
+
+    @property
+    def available(self) -> bool:
+        return True
+
+
+class MissingHourlyReadingsSensor(_BaseSensor):
+    """Number of currently detected internal hourly gaps."""
+
+    _attr_translation_key = "missing_hourly_readings"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator: VsChrudimCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.place.identifier}_missing_hourly_readings"
+
+    @property
+    def native_value(self) -> int:
+        return self.coordinator.current_missing_hourly_readings
+
+    @property
+    def available(self) -> bool:
+        return True
+
+
+class OldestMissingHourlyReadingSensor(_BaseSensor):
+    """Oldest internal hourly gap detected in the current readings."""
+
+    _attr_translation_key = "oldest_missing_hourly_reading"
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator: VsChrudimCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = (
+            f"{coordinator.place.identifier}_oldest_missing_hourly_reading"
+        )
+
+    @property
+    def native_value(self):
+        if self.coordinator.oldest_missing_hour is None:
+            return None
+        local_tz = dt_util.get_time_zone(self.coordinator.hass.config.time_zone)
+        return self.coordinator.oldest_missing_hour.replace(tzinfo=local_tz)
+
+    @property
+    def available(self) -> bool:
+        return True
+
+
+class LastDownloadReadingCountSensor(_BaseSensor):
+    """Number of readings returned by the most recent portal download."""
+
+    _attr_translation_key = "last_download_reading_count"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator: VsChrudimCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = (
+            f"{coordinator.place.identifier}_last_download_reading_count"
+        )
+
+    @property
+    def native_value(self) -> int:
+        return self.coordinator.last_download_reading_count
+
+    @property
+    def available(self) -> bool:
+        return True
+
+
+class DuplicateReadingsMergedSensor(_BaseSensor):
+    """Timestamp collisions collapsed during the most recent download."""
+
+    _attr_translation_key = "duplicate_readings_merged"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator: VsChrudimCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = (
+            f"{coordinator.place.identifier}_duplicate_readings_merged"
+        )
+
+    @property
+    def native_value(self) -> int:
+        return self.coordinator.last_duplicate_readings_merged
+
+    @property
+    def available(self) -> bool:
+        return True
+
+
+class MissingReadingsRecoveredSensor(_BaseSensor):
+    """Gaps filled by recovery downloads during the most recent update."""
+
+    _attr_translation_key = "missing_readings_recovered"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator: VsChrudimCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = (
+            f"{coordinator.place.identifier}_missing_readings_recovered"
+        )
+
+    @property
+    def native_value(self) -> int:
+        return self.coordinator.last_missing_readings_recovered
 
     @property
     def available(self) -> bool:

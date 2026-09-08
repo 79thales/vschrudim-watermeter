@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.14 - 2026-09-08
+
+- Add a concise source-status diagnostic, gap diagnostics and per-download
+  data-quality counters, including the actual retrieval method and exact
+  successful-download time.
+- Add a device **Test download** button that verifies login and the current
+  download without starting history work or changing Energy statistics.
+- Make source and missing-reading notifications transition-based, while keeping
+  portal data age diagnostic-only unless the user explicitly enables a delay
+  status threshold.
+
 ## 0.4.13 - 2026-09-08
 
 - Add an exact local timestamp diagnostic for the newest reading returned by

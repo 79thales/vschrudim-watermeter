@@ -17,6 +17,7 @@ from .const import (
     CONF_PRICE_PER_M3,
     CONF_RETRY_DELAY,
     CONF_SCAN_INTERVAL,
+    CONF_SOURCE_DELAY_WARNING_HOURS,
     DEFAULT_FAILURE_THRESHOLD,
     DEFAULT_MISSING_RETRY_ATTEMPTS,
     DEFAULT_NOTIFY_MISSING,
@@ -24,6 +25,7 @@ from .const import (
     DEFAULT_PRICE_PER_M3,
     DEFAULT_RETRY_DELAY,
     DEFAULT_SCAN_INTERVAL,
+    DEFAULT_SOURCE_DELAY_WARNING_HOURS,
     DOMAIN,
     MIN_SCAN_INTERVAL,
 )
@@ -109,6 +111,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Required(CONF_NOTIFY_MISSING, default=entry.options.get(CONF_NOTIFY_MISSING, DEFAULT_NOTIFY_MISSING)): bool,
                     vol.Required(CONF_MISSING_RETRY_ATTEMPTS, default=entry.options.get(CONF_MISSING_RETRY_ATTEMPTS, DEFAULT_MISSING_RETRY_ATTEMPTS)): vol.All(vol.Coerce(int), vol.Range(min=0, max=5)),
                     vol.Required(CONF_RETRY_DELAY, default=entry.options.get(CONF_RETRY_DELAY, DEFAULT_RETRY_DELAY)): vol.All(vol.Coerce(int), vol.Range(min=5, max=900)),
+                    vol.Required(CONF_SOURCE_DELAY_WARNING_HOURS, default=entry.options.get(CONF_SOURCE_DELAY_WARNING_HOURS, DEFAULT_SOURCE_DELAY_WARNING_HOURS)): vol.All(vol.Coerce(int), vol.Range(min=0, max=8760)),
                 }
             ),
         )

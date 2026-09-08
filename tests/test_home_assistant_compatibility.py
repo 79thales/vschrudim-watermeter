@@ -75,6 +75,89 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
             "06.09.2026 15:00",
         )
 
+    def test_source_delay_status_requires_an_explicit_user_threshold(self):
+        from custom_components.vschrudim_watermeter import coordinator as module
+        from custom_components.vschrudim_watermeter.coordinator import (
+            VsChrudimCoordinator,
+        )
+        from custom_components.vschrudim_watermeter.models import MeterReading
+
+        coordinator = object.__new__(VsChrudimCoordinator)
+        coordinator.hass = SimpleNamespace(
+            config=SimpleNamespace(time_zone="Europe/Prague")
+        )
+        coordinator.entry = SimpleNamespace(options={})
+        reading = MeterReading(datetime(2026, 9, 6, 15, 0), 10.0)
+
+        with patch.object(
+            module.dt_util,
+            "now",
+            return_value=datetime(2026, 9, 8, 15, tzinfo=ZoneInfo("Europe/Prague")),
+        ):
+            self.assertEqual(
+                coordinator._source_status_for_readings((reading,)), "ok"
+            )
+            coordinator.entry.options = {"source_delay_warning_hours": 1}
+            self.assertEqual(
+                coordinator._source_status_for_readings((reading,)),
+                "delayed_data",
+            )
+
+    def test_source_notifications_only_follow_problem_state_changes(self):
+        from custom_components.vschrudim_watermeter import coordinator as module
+        from custom_components.vschrudim_watermeter.coordinator import (
+            VsChrudimCoordinator,
+        )
+
+        coordinator = object.__new__(VsChrudimCoordinator)
+        coordinator.hass = SimpleNamespace()
+        coordinator.entry = SimpleNamespace(
+            entry_id="test", options={"notify_unavailable": True}
+        )
+        coordinator.source_status = "unknown"
+        coordinator._source_problem_notification_active = False
+
+        with (
+            patch.object(module, "async_create") as create,
+            patch.object(module, "async_dismiss"),
+        ):
+            coordinator._set_source_status(
+                "error", error=ValueError("portal unavailable"), notify_problem=True
+            )
+            coordinator._set_source_status(
+                "error", error=ValueError("portal unavailable"), notify_problem=True
+            )
+            coordinator._set_source_status("delayed_data")
+            coordinator._set_source_status("ok")
+
+        self.assertEqual(create.call_count, 2)
+        self.assertEqual(coordinator.source_status, "ok")
+
+    def test_missing_reading_notifications_only_follow_state_changes(self):
+        from custom_components.vschrudim_watermeter import coordinator as module
+        from custom_components.vschrudim_watermeter.coordinator import (
+            VsChrudimCoordinator,
+        )
+
+        coordinator = object.__new__(VsChrudimCoordinator)
+        coordinator.hass = SimpleNamespace()
+        coordinator.entry = SimpleNamespace(
+            entry_id="test", options={"notify_missing": True}
+        )
+        coordinator._missing_problem_notification_active = False
+        missing = (datetime(2026, 1, 1, 11),)
+
+        with (
+            patch.object(module, "async_create") as create,
+            patch.object(module, "async_dismiss"),
+        ):
+            coordinator._handle_missing_hours_notification(missing, 2)
+            coordinator._handle_missing_hours_notification(missing, 2)
+            coordinator._handle_missing_hours_notification((), 0)
+
+        self.assertEqual(create.call_count, 2)
+        self.assertFalse(coordinator._missing_problem_notification_active)
+
     def test_external_history_statistics_are_monotonic(self):
         from custom_components.vschrudim_watermeter.history import (
             async_add_external_meter_statistics,
@@ -241,6 +324,75 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
         asyncio.run(button.async_press())
         coordinator.async_retry_history_download.assert_awaited_once_with()
 
+    def test_download_test_button_does_not_start_history_or_statistics_work(self):
+        from homeassistant.const import EntityCategory
+        from custom_components.vschrudim_watermeter.button import TestDownloadButton
+
+        coordinator = SimpleNamespace(
+            place=SimpleNamespace(identifier="test", address="Test meter"),
+            statistics_operation_running=False,
+            async_test_download=AsyncMock(),
+        )
+        button = TestDownloadButton(coordinator)
+
+        self.assertEqual(button.entity_category, EntityCategory.DIAGNOSTIC)
+        self.assertTrue(button.available)
+        asyncio.run(button.async_press())
+        coordinator.async_test_download.assert_awaited_once_with()
+
+    def test_download_test_fetches_without_importing_or_starting_backfill(self):
+        from custom_components.vschrudim_watermeter.coordinator import (
+            VsChrudimCoordinator,
+        )
+        from custom_components.vschrudim_watermeter.models import (
+            ConsumptionPlace,
+            DownloadMetadata,
+            MeterReading,
+            WaterMeterData,
+        )
+
+        place = ConsumptionPlace("test", "", "", "", "")
+        data = WaterMeterData(
+            place,
+            (MeterReading(datetime(2026, 1, 1, 10), 10.0),),
+            0.0,
+            download_metadata=DownloadMetadata(source="html_table"),
+        )
+        coordinator = object.__new__(VsChrudimCoordinator)
+        coordinator._statistics_operation_lock = asyncio.Lock()
+        coordinator._api_lock = asyncio.Lock()
+        coordinator.client = SimpleNamespace(async_get_data=AsyncMock(return_value=data))
+        coordinator.place = place
+        coordinator.last_test_download_at = None
+        coordinator.last_test_download_result = "never"
+        coordinator.last_test_download_error = None
+        coordinator.last_download_source = "unknown"
+        coordinator.last_download_latest_timestamp = None
+        coordinator.last_download_reading_count = 0
+        coordinator.last_duplicate_readings_merged = 0
+        coordinator.last_missing_readings_recovered = 0
+        coordinator.current_missing_hourly_readings = 0
+        coordinator.oldest_missing_hour = None
+        coordinator.last_success_at = None
+        coordinator._set_source_status = Mock()
+        coordinator._handle_missing_hours_notification = Mock()
+        coordinator.async_update_listeners = Mock()
+        coordinator._async_import_readings = AsyncMock()
+        coordinator.async_start_history_backfill = Mock()
+
+        asyncio.run(coordinator.async_test_download())
+
+        coordinator._async_import_readings.assert_not_awaited()
+        coordinator.async_start_history_backfill.assert_not_called()
+        coordinator._handle_missing_hours_notification.assert_not_called()
+        self.assertEqual(coordinator.last_test_download_result, "success")
+        self.assertEqual(coordinator.last_download_source, "html_table")
+        self.assertEqual(
+            coordinator.last_download_latest_timestamp,
+            datetime(2026, 1, 1, 10),
+        )
+        self.assertEqual(coordinator.last_download_reading_count, 1)
+
     def test_retry_history_download_refreshes_before_starting_backfill(self):
         from custom_components.vschrudim_watermeter.coordinator import (
             VsChrudimCoordinator,
@@ -327,6 +479,17 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
             last_success_at=None,
             last_attempt_result="failed",
             last_attempt_error="password=credential-token-73921",
+            source_status="error",
+            last_download_source="unknown",
+            last_download_latest_timestamp=None,
+            last_download_reading_count=0,
+            last_duplicate_readings_merged=0,
+            last_missing_readings_recovered=0,
+            current_missing_hourly_readings=0,
+            oldest_missing_hour=None,
+            last_test_download_at=None,
+            last_test_download_result="never",
+            last_test_download_error=None,
             download_attempt_history=[older, newer],
             consumption_statistic_id="vschrudim_watermeter:example_water_consumption",
             cost_statistic_id="vschrudim_watermeter:example_water_cost",

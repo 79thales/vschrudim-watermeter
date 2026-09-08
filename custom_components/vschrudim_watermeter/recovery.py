@@ -16,6 +16,19 @@ def merge_readings(*groups: Iterable[MeterReading]) -> tuple[MeterReading, ...]:
     return tuple(sorted(merged.values(), key=lambda item: item.timestamp))
 
 
+def count_duplicate_readings(*groups: Iterable[MeterReading]) -> int:
+    """Return the number of timestamp collisions that a merge will collapse."""
+    seen: set[datetime] = set()
+    duplicates = 0
+    for group in groups:
+        for reading in group:
+            if reading.timestamp in seen:
+                duplicates += 1
+            else:
+                seen.add(reading.timestamp)
+    return duplicates
+
+
 def find_missing_hours(readings: Iterable[MeterReading]) -> tuple[datetime, ...]:
     """Return gaps between confirmed hourly readings.
 

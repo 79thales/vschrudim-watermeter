@@ -32,6 +32,7 @@ from .const import (
     CONF_PRICE_PER_M3,
     CONF_RETRY_DELAY,
     CONF_SCAN_INTERVAL,
+    CONF_SOURCE_DELAY_WARNING_HOURS,
     DEFAULT_FAILURE_THRESHOLD,
     DEFAULT_MISSING_RETRY_ATTEMPTS,
     DEFAULT_NOTIFY_MISSING,
@@ -39,6 +40,7 @@ from .const import (
     DEFAULT_PRICE_PER_M3,
     DEFAULT_RETRY_DELAY,
     DEFAULT_SCAN_INTERVAL,
+    DEFAULT_SOURCE_DELAY_WARNING_HOURS,
     DOMAIN,
 )
 from .models import ConsumptionPlace, DownloadMetadata, MeterReading, WaterMeterData
@@ -50,7 +52,7 @@ from .history import (
     meter_statistics,
 )
 from .attempts import DownloadAttempt, append_attempt, load_attempt_history, sanitize_error_message
-from .recovery import find_missing_hours, merge_readings
+from .recovery import count_duplicate_readings, find_missing_hours, merge_readings
 
 _LOGGER = logging.getLogger(__name__)
 _HISTORY_STORE_VERSION = 1
@@ -99,6 +101,19 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
         self.last_success_at: datetime | None = None
         self.last_attempt_result = "never"
         self.last_attempt_error: str | None = None
+        self.source_status = "unknown"
+        self.last_download_source = "unknown"
+        self.last_download_latest_timestamp: datetime | None = None
+        self.last_download_reading_count = 0
+        self.last_duplicate_readings_merged = 0
+        self.last_missing_readings_recovered = 0
+        self.current_missing_hourly_readings = 0
+        self.oldest_missing_hour: datetime | None = None
+        self.last_test_download_at: datetime | None = None
+        self.last_test_download_result = "never"
+        self.last_test_download_error: str | None = None
+        self._source_problem_notification_active = False
+        self._missing_problem_notification_active = False
         self.history_backfill_status = "not_started"
         self.history_backfill_started_at: datetime | None = None
         self.history_backfill_completed_at: datetime | None = None
@@ -176,6 +191,124 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
     def _history_notification_id(self) -> str:
         return f"{DOMAIN}_{self.entry.entry_id}_history_backfill"
 
+    @property
+    def _source_recovered_notification_id(self) -> str:
+        return f"{DOMAIN}_{self.entry.entry_id}_source_recovered"
+
+    @property
+    def _missing_recovered_notification_id(self) -> str:
+        return f"{DOMAIN}_{self.entry.entry_id}_missing_data_recovered"
+
+    def _source_status_for_readings(
+        self, readings: tuple[MeterReading, ...]
+    ) -> str:
+        """Classify source freshness only when the user configured a limit."""
+        warning_hours = int(
+            self.entry.options.get(
+                CONF_SOURCE_DELAY_WARNING_HOURS,
+                DEFAULT_SOURCE_DELAY_WARNING_HOURS,
+            )
+        )
+        if warning_hours <= 0 or not readings:
+            return "ok"
+        local_tz = dt_util.get_time_zone(self.hass.config.time_zone)
+        now_local = dt_util.now().astimezone(local_tz).replace(tzinfo=None)
+        latest = readings[-1].timestamp
+        if now_local - latest > timedelta(hours=warning_hours):
+            return "delayed_data"
+        return "ok"
+
+    def _set_source_status(
+        self,
+        status: str,
+        *,
+        error: Exception | None = None,
+        notify_problem: bool = False,
+    ) -> None:
+        """Update source state and notify once per problem-state transition."""
+        previous = self.source_status
+        self.source_status = status
+
+        if status in {"authentication_required", "error"}:
+            if (
+                notify_problem
+                and self.entry.options.get(
+                    CONF_NOTIFY_UNAVAILABLE,
+                    DEFAULT_NOTIFY_UNAVAILABLE,
+                )
+                and (previous != status or not self._source_problem_notification_active)
+            ):
+                async_dismiss(self.hass, self._source_recovered_notification_id)
+                message = (
+                    "Home Assistant needs you to reauthenticate the VS Chrudim "
+                    "watermeter integration."
+                    if status == "authentication_required"
+                    else "The VS Chrudim portal is unavailable. Home Assistant "
+                    "will keep retrying automatically. Last error: "
+                    f"{sanitize_error_message(error) or 'Unknown error'}"
+                )
+                async_create(
+                    self.hass,
+                    message,
+                    title="VSChrudim watermeter – source needs attention",
+                    notification_id=self._unavailable_notification_id,
+                )
+                self._source_problem_notification_active = True
+            return
+
+        async_dismiss(self.hass, self._unavailable_notification_id)
+        notifications_enabled = self.entry.options.get(
+            CONF_NOTIFY_UNAVAILABLE, DEFAULT_NOTIFY_UNAVAILABLE
+        )
+        if (
+            status == "ok"
+            and notifications_enabled
+            and self._source_problem_notification_active
+        ):
+            async_create(
+                self.hass,
+                "A VS Chrudim portal download succeeded again.",
+                title="VSChrudim watermeter – source restored",
+                notification_id=self._source_recovered_notification_id,
+            )
+        if status == "ok":
+            self._source_problem_notification_active = False
+
+    def _handle_missing_hours_notification(
+        self, missing: tuple[datetime, ...], recovery_attempts: int
+    ) -> None:
+        """Notify only when missing readings appear or are fully recovered."""
+        notify_missing = self.entry.options.get(
+            CONF_NOTIFY_MISSING, DEFAULT_NOTIFY_MISSING
+        )
+        if missing and notify_missing:
+            if not self._missing_problem_notification_active:
+                preview = ", ".join(
+                    item.isoformat(timespec="minutes") for item in missing[:10]
+                )
+                suffix = " …" if len(missing) > 10 else ""
+                async_dismiss(self.hass, self._missing_recovered_notification_id)
+                async_create(
+                    self.hass,
+                    "The portal still has "
+                    f"{len(missing)} missing hourly reading(s) after "
+                    f"{recovery_attempts} recovery attempt(s): {preview}{suffix}",
+                    title="VSChrudim watermeter – missing data",
+                    notification_id=self._missing_notification_id,
+                )
+                self._missing_problem_notification_active = True
+            return
+
+        async_dismiss(self.hass, self._missing_notification_id)
+        if self._missing_problem_notification_active and notify_missing:
+            async_create(
+                self.hass,
+                "All previously reported missing hourly readings are available again.",
+                title="VSChrudim watermeter – data recovered",
+                notification_id=self._missing_recovered_notification_id,
+            )
+        self._missing_problem_notification_active = False
+
     async def _async_update_data(self) -> WaterMeterData:
         started_at = dt_util.now()
         started_monotonic = monotonic()
@@ -185,8 +318,12 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
         try:
             async with self._api_lock:
                 data = await self.client.async_get_data(self.place)
+            duplicate_readings = count_duplicate_readings(
+                self._known_readings, data.readings
+            )
             merged = merge_readings(self._known_readings, data.readings)
-            missing = find_missing_hours(merged)
+            initially_missing = find_missing_hours(merged)
+            missing = initially_missing
             attempts = 0
             maximum_attempts = int(self.entry.options.get(CONF_MISSING_RETRY_ATTEMPTS, DEFAULT_MISSING_RETRY_ATTEMPTS))
             retry_delay = int(self.entry.options.get(CONF_RETRY_DELAY, DEFAULT_RETRY_DELAY))
@@ -195,22 +332,24 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
                 await asyncio.sleep(retry_delay)
                 async with self._api_lock:
                     retry_data = await self.client.async_get_data(self.place)
+                duplicate_readings += count_duplicate_readings(
+                    merged, retry_data.readings
+                )
                 merged = merge_readings(merged, retry_data.readings)
                 missing = find_missing_hours(merged)
             self._known_readings = merged
             self._consecutive_failures = 0
-            async_dismiss(self.hass, self._unavailable_notification_id)
-            if missing and self.entry.options.get(CONF_NOTIFY_MISSING, DEFAULT_NOTIFY_MISSING):
-                preview = ", ".join(item.isoformat(timespec="minutes") for item in missing[:10])
-                suffix = " …" if len(missing) > 10 else ""
-                async_create(
-                    self.hass,
-                    f"The portal still has {len(missing)} missing hourly reading(s) after {attempts} recovery attempt(s): {preview}{suffix}",
-                    title="VSChrudim watermeter – missing data",
-                    notification_id=self._missing_notification_id,
-                )
-            else:
-                async_dismiss(self.hass, self._missing_notification_id)
+            self.last_download_source = data.download_metadata.source
+            self.last_download_latest_timestamp = (
+                data.readings[-1].timestamp if data.readings else None
+            )
+            self.last_download_reading_count = len(data.readings)
+            self.last_duplicate_readings_merged = duplicate_readings
+            self.last_missing_readings_recovered = len(
+                set(initially_missing) - set(missing)
+            )
+            self.current_missing_hourly_readings = len(missing)
+            self.oldest_missing_hour = missing[0] if missing else None
             result = WaterMeterData(
                 self.place,
                 merged,
@@ -222,6 +361,8 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
             self.last_success_at = dt_util.now()
             self.last_attempt_result = "success"
             self.last_attempt_error = None
+            self._set_source_status(self._source_status_for_readings(data.readings))
+            self._handle_missing_hours_notification(missing, attempts)
             await self._async_import_readings(merged)
             await self._async_record_download_attempt(
                 started_at,
@@ -241,6 +382,9 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
         except VsChrudimAuthError as err:
             self.last_attempt_result = "authentication_failed"
             self.last_attempt_error = "Authentication is no longer valid"
+            self._set_source_status(
+                "authentication_required", error=err, notify_problem=True
+            )
             await self._async_record_download_attempt(
                 started_at,
                 started_monotonic,
@@ -260,13 +404,11 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
             )
             self._consecutive_failures += 1
             threshold = int(self.entry.options.get(CONF_FAILURE_THRESHOLD, DEFAULT_FAILURE_THRESHOLD))
-            if self._consecutive_failures >= threshold and self.entry.options.get(CONF_NOTIFY_UNAVAILABLE, DEFAULT_NOTIFY_UNAVAILABLE):
-                async_create(
-                    self.hass,
-                    f"The VS Chrudim portal has failed {self._consecutive_failures} consecutive updates. Home Assistant will keep retrying automatically. Last error: {err}",
-                    title="VSChrudim watermeter – source unavailable",
-                    notification_id=self._unavailable_notification_id,
-                )
+            self._set_source_status(
+                "error",
+                error=err,
+                notify_problem=self._consecutive_failures >= threshold,
+            )
             raise UpdateFailed(str(err), retry_after=max(60, int(self.entry.options.get(CONF_RETRY_DELAY, DEFAULT_RETRY_DELAY)))) from err
 
     def async_register_meter_entity(self, entity_id: str) -> None:
@@ -630,6 +772,53 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
             self._history_backfill_task
             and not self._history_backfill_task.done()
         )
+
+    async def async_test_download(self) -> None:
+        """Validate one current portal download without importing any data.
+
+        This is intentionally separate from the reconciliation button: it
+        never changes live sensor data, starts a history scan, or writes
+        Energy statistics.
+        """
+        if self.statistics_operation_running:
+            raise HomeAssistantError("Energy statistics maintenance is in progress")
+
+        self.last_test_download_at = dt_util.now()
+        self.last_test_download_result = "running"
+        self.last_test_download_error = None
+        self.async_update_listeners()
+        try:
+            async with self._api_lock:
+                data = await self.client.async_get_data(self.place)
+            missing = find_missing_hours(data.readings)
+            self.last_test_download_result = "success"
+            self.last_download_source = data.download_metadata.source
+            self.last_download_latest_timestamp = (
+                data.readings[-1].timestamp if data.readings else None
+            )
+            self.last_download_reading_count = len(data.readings)
+            self.last_duplicate_readings_merged = 0
+            self.last_missing_readings_recovered = 0
+            self.current_missing_hourly_readings = len(missing)
+            self.oldest_missing_hour = missing[0] if missing else None
+            self.last_success_at = dt_util.now()
+            self._set_source_status(self._source_status_for_readings(data.readings))
+        except VsChrudimAuthError as err:
+            self.last_test_download_result = "authentication_failed"
+            self.last_test_download_error = "Authentication is no longer valid"
+            self._set_source_status(
+                "authentication_required", error=err, notify_problem=True
+            )
+            raise ConfigEntryAuthFailed from err
+        except VsChrudimError as err:
+            self.last_test_download_result = "failed"
+            self.last_test_download_error = sanitize_error_message(err)
+            self._set_source_status("error", error=err, notify_problem=True)
+            raise HomeAssistantError(
+                self.last_test_download_error or "The portal download test failed"
+            ) from err
+        finally:
+            self.async_update_listeners()
 
     async def async_retry_history_download(self) -> None:
         """Retry the current portal download and reconcile available history.

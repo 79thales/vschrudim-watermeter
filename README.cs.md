@@ -95,6 +95,9 @@ spustí nový idempotentní průchod dostupnou hodinovou historií. Nejde o tla�
 **Obnovit statistiky Energie**: pokus nemaže statistiky ani běžnou historii
 živých senzorů. `Data stažena do` vždy ukazuje nejnovější čas skutečně vrácený
 portálem VS Chrudim; integrace nepředpokládá žádnou maximální přípustnou prodlevu.
+Tlačítko **Otestovat stažení** ve stejné části pouze ověří přihlášení a aktuální
+stažení z portálu. Nespouští doplňování historie a nezapisuje ani nemění
+statistiky Energie.
 Home Assistant u této časové entity zobrazuje relativní stáří; samostatná
 entita `Poslední odečet na portálu` proto ukazuje přesné místní datum a čas.
 
@@ -105,10 +108,22 @@ takže opakovaný pokus nevytvoří druhou statistickou řadu.
 
 Diagnostické entity zobrazují:
 
+- jediný stav zdroje: `ok`, `delayed_data`, `authentication_required` nebo
+  `error`, včetně přesného času posledního úspěšného stažení a metody (odkaz
+  CSV, WebForms postback/submit nebo HTML tabulka),
 - relativní stáří nejnovější časové značky (`Data stažena do`) a její přesné
   místní datum a čas (`Poslední odečet na portálu`),
 - čas a výsledek posledního pokusu o aktualizaci (`Last update attempt`),
+- počet aktuálně chybějících hodinových odečtů a čas nejstarší mezery,
+- počitadla kvality posledního stažení: počet vrácených odečtů, sloučené
+  duplicitní časové značky a mezery doplněné opakovaným stažením,
 - postup tříletého doplnění historie, počet importovaných hodin a poslední chybu (`History backfill status`).
+
+Volba **Označit data portálu jako zpožděná po** je nepovinná a výchozí hodnota
+`0` ji vypíná. Mění pouze diagnostický stav zdroje; starší data sama o sobě
+nejsou selháním aktualizace. Upozornění vzniká jen při nutnosti opětovného
+přihlášení, při přetrvávajících mezerách po nastavených pokusech a při návratu
+takového stavu do normálu. Samotné zpoždění dat upozornění nevytváří.
 
 Stažená diagnostika navíc obsahuje nejnovější-první průběžnou historii posledních
 30 běžných pokusů o stažení. Každý záznam obsahuje pouze bezpečný čas, výsledek,
@@ -118,9 +133,13 @@ identifikátory odběrného místa ani URL požadavků.
 
 ## Upozornění na nedostupnost a chybějící odečty
 
-Integrace používá trvalá oznámení Home Assistantu. Ve výchozím nastavení po třech po sobě jdoucích neúspěšných aktualizacích oznámí nedostupnost portálu, při dalších chybách stejné oznámení nahradí a po obnovení ho automaticky odstraní. Chyby přihlášení řeší standardním procesem opětovné autentizace.
+Integrace používá trvalá oznámení Home Assistantu pouze při změně stavu. Ve
+výchozím nastavení po třech po sobě jdoucích neúspěšných aktualizacích oznámí
+nedostupnost portálu, problém s přihlášením oznámí hned a po návratu kteréhokoli
+z těchto stavů do normálu vytvoří jediné oznámení o obnovení. Chyby přihlášení
+řeší standardním procesem opětovné autentizace.
 
-Každé úspěšné stažení se spojí s odečty, které už byly během běhu integrace získány. Vnitřní hodinové mezery vyvolají až dva opakované požadavky s nastavitelnou prodlevou. Opravená hodnota portálu nahradí starší hodnotu se stejnou časovou značkou. Pokud mezery zůstanou, jedno trvalé oznámení uvede jejich počet a krátký přehled časů; po doplnění odečtů zmizí. Neexistující 02:00 při českém přechodu na letní čas se za chybějící odečet nepovažuje. Prahy, oznámení, počet pokusů i prodlevy lze změnit přes **Přenastavit**.
+Každé úspěšné stažení se spojí s odečty, které už byly během běhu integrace získány. Vnitřní hodinové mezery vyvolají až dva opakované požadavky s nastavitelnou prodlevou. Opravená hodnota portálu nahradí starší hodnotu se stejnou časovou značkou. Pokud mezery po těchto pokusech zůstanou, jediné trvalé oznámení uvede jejich počet a krátký přehled časů; po jejich doplnění vznikne jediné oznámení o obnově. Neexistující 02:00 při českém přechodu na letní čas se za chybějící odečet nepovažuje. Prahy, oznámení, počet pokusů i prodlevy lze změnit přes **Přenastavit**.
 
 ## Kompatibilita s portálem
 

@@ -94,6 +94,9 @@ Use **Retry history download** in the device's **Diagnostics** section to
 request an immediate portal update and then resume a saved backfill or start a
 new reconciliation of the available hourly history. It is not **Rebuild Energy
 statistics**: the retry does not delete any statistics or live-sensor history.
+Use **Test download** in the same section when you only want to verify the
+login and a current portal download. It neither starts a history backfill nor
+writes or changes Energy statistics.
 `Data available through` always reports the latest timestamp actually returned
 by VS Chrudim; the integration does not assume an allowed portal delay.
 Home Assistant renders that timestamp entity relatively. **Latest portal
@@ -106,10 +109,22 @@ statistic IDs, so retrying does not create a second statistic series.
 
 Diagnostic entities show:
 
+- one source state: `ok`, `delayed_data`, `authentication_required`, or
+  `error`, with the exact last successful download time and method (CSV link,
+  WebForms postback/submit, or HTML table),
 - the relative age of the newest portal timestamp (`Data available through`)
   and its exact local date and time (`Latest portal reading`),
 - the time and result of the latest update attempt (`Last update attempt`),
+- the number of currently missing hourly readings and their oldest timestamp,
+- data-quality counters for the most recent download: returned readings,
+  duplicate timestamps merged, and gaps recovered by retry downloads,
 - three-year history progress, imported-hour count and the last backfill error (`History backfill status`).
+
+`Mark portal data as delayed after` is optional and defaults to `0` (disabled).
+It only changes the source-state diagnostic and never treats old portal data as
+a failed update. Notifications are created only when authentication is needed,
+when gaps remain after the configured retries, or when either condition returns
+to normal; a delayed timestamp alone never creates a notification.
 
 The downloaded diagnostics additionally include a newest-first rolling history
 of the last 30 normal download attempts. Each record contains only safe timing,
@@ -119,9 +134,13 @@ content, consumption-place identifiers or request URLs.
 
 ## Availability notifications and missing readings
 
-The integration uses Home Assistant persistent notifications. By default it reports the portal as unavailable after three consecutive failed updates, replaces the same notification on further failures, and dismisses it automatically after recovery. Authentication errors use the standard reauthentication flow instead.
+The integration uses Home Assistant persistent notifications only on state
+transitions. By default it reports the portal as unavailable after three
+consecutive failed updates, reports an authentication problem immediately, and
+creates one recovery notification after either problem returns to normal.
+Authentication errors use the standard reauthentication flow.
 
-Every successful download is merged with readings already seen during the current runtime. Internal hourly gaps trigger up to two repeated downloads with a configurable delay. Corrected portal values replace the older value with the same timestamp. If gaps remain, one persistent notification lists their count and a short timestamp preview; it disappears when the readings are filled. Czech spring DST's nonexistent 02:00 hour is not treated as missing. All thresholds, notifications, attempt counts and delays can be changed under **Reconfigure**.
+Every successful download is merged with readings already seen during the current runtime. Internal hourly gaps trigger up to two repeated downloads with a configurable delay. Corrected portal values replace the older value with the same timestamp. If gaps remain after those attempts, one persistent notification lists their count and a short timestamp preview; a recovery notification is created once the readings are filled. Czech spring DST's nonexistent 02:00 hour is not treated as missing. All thresholds, notifications, attempt counts and delays can be changed under **Reconfigure**.
 
 ## Portal compatibility
 

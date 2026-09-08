@@ -31,6 +31,25 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
             else None,
             "last_attempt_result": coordinator.last_attempt_result,
             "last_attempt_error": sanitize_error_message(coordinator.last_attempt_error),
+            "source_status": coordinator.source_status,
+            "last_download_source": coordinator.last_download_source,
+            "last_download_latest_timestamp": coordinator.last_download_latest_timestamp.isoformat()
+            if coordinator.last_download_latest_timestamp
+            else None,
+            "last_download_reading_count": coordinator.last_download_reading_count,
+            "duplicate_readings_merged": coordinator.last_duplicate_readings_merged,
+            "missing_readings_recovered": coordinator.last_missing_readings_recovered,
+            "current_missing_hourly_readings": coordinator.current_missing_hourly_readings,
+            "oldest_missing_hour": coordinator.oldest_missing_hour.isoformat()
+            if coordinator.oldest_missing_hour
+            else None,
+            "last_test_download": {
+                "at": coordinator.last_test_download_at.isoformat()
+                if coordinator.last_test_download_at
+                else None,
+                "result": coordinator.last_test_download_result,
+                "error": sanitize_error_message(coordinator.last_test_download_error),
+            },
             "download_attempt_history": [
                 attempt.as_dict()
                 for attempt in reversed(coordinator.download_attempt_history)

@@ -20,6 +20,7 @@ async def async_setup_entry(
     """Set up independent data-download and statistics-maintenance buttons."""
     async_add_entities(
         [
+            TestDownloadButton(entry.runtime_data),
             RetryHistoryDownloadButton(entry.runtime_data),
             RebuildEnergyStatisticsButton(entry.runtime_data),
         ]
@@ -56,6 +57,33 @@ class RetryHistoryDownloadButton(ButtonEntity):
     async def async_press(self) -> None:
         """Download current data, then resume or restart history reconciliation."""
         await self.coordinator.async_retry_history_download()
+
+
+class TestDownloadButton(ButtonEntity):
+    """Check authentication and a current portal download without side effects."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "test_download"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:connection"
+
+    def __init__(self, coordinator: VsChrudimCoordinator) -> None:
+        self.coordinator = coordinator
+        identifier = coordinator.place.identifier
+        self._attr_unique_id = f"{identifier}_test_download"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, identifier)},
+            name=coordinator.place.address or f"VS Chrudim {identifier}",
+            manufacturer="Vodárenská společnost Chrudim",
+            model="Smart water meter",
+        )
+
+    @property
+    def available(self) -> bool:
+        return not self.coordinator.statistics_operation_running
+
+    async def async_press(self) -> None:
+        await self.coordinator.async_test_download()
 
 
 class RebuildEnergyStatisticsButton(ButtonEntity):
