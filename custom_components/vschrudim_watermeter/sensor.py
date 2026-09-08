@@ -20,6 +20,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry[VsChrudimCoo
             WaterPriceSensor(entry.runtime_data, entry),
             TotalWaterCostSensor(entry.runtime_data, entry),
             DataAvailableThroughSensor(entry.runtime_data),
+            LatestPortalReadingSensor(entry.runtime_data),
             LastUpdateAttemptSensor(entry.runtime_data),
             HistoryBackfillStatusSensor(entry.runtime_data),
         ]
@@ -158,6 +159,43 @@ class DataAvailableThroughSensor(_BaseSensor):
             return None
         local_tz = dt_util.get_time_zone(self.coordinator.hass.config.time_zone)
         return data.readings[-1].timestamp.replace(tzinfo=local_tz)
+
+    @property
+    def available(self) -> bool:
+        return True
+
+
+class LatestPortalReadingSensor(_BaseSensor):
+    """Exact local timestamp of the newest reading returned by the portal."""
+
+    _attr_translation_key = "latest_portal_reading"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator: VsChrudimCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.place.identifier}_latest_portal_reading"
+
+    @property
+    def native_value(self) -> str | None:
+        data = self.coordinator.data
+        if not data or not data.readings:
+            return None
+        # A plain text state is intentional. Home Assistant renders timestamp
+        # entities relatively (for example "21 hours ago"), whereas this
+        # diagnostic must show the exact local portal reading time directly.
+        return data.readings[-1].timestamp.strftime("%d.%m.%Y %H:%M")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, str] | None:
+        data = self.coordinator.data
+        if not data or not data.readings:
+            return None
+        local_tz = dt_util.get_time_zone(self.coordinator.hass.config.time_zone)
+        return {
+            "timestamp": data.readings[-1].timestamp.replace(
+                tzinfo=local_tz
+            ).isoformat()
+        }
 
     @property
     def available(self) -> bool:

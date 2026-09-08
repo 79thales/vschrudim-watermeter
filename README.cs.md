@@ -95,6 +95,8 @@ spustí nový idempotentní průchod dostupnou hodinovou historií. Nejde o tla�
 **Obnovit statistiky Energie**: pokus nemaže statistiky ani běžnou historii
 živých senzorů. `Data stažena do` vždy ukazuje nejnovější čas skutečně vrácený
 portálem VS Chrudim; integrace nepředpokládá žádnou maximální přípustnou prodlevu.
+Home Assistant u této časové entity zobrazuje relativní stáří; samostatná
+entita `Poslední odečet na portálu` proto ukazuje přesné místní datum a čas.
 
 Opakované odpovědi portálu se spojují podle časové značky; opravená hodnota
 nahradí starší hodnotu stejného času. Zapisovače externích statistik navíc
@@ -103,7 +105,8 @@ takže opakovaný pokus nevytvoří druhou statistickou řadu.
 
 Diagnostické entity zobrazují:
 
-- nejnovější časovou značku obsaženou v posledním úspěšném stažení (`Data available through`),
+- relativní stáří nejnovější časové značky (`Data stažena do`) a její přesné
+  místní datum a čas (`Poslední odečet na portálu`),
 - čas a výsledek posledního pokusu o aktualizaci (`Last update attempt`),
 - postup tříletého doplnění historie, počet importovaných hodin a poslední chybu (`History backfill status`).
 

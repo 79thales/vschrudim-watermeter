@@ -96,6 +96,8 @@ new reconciliation of the available hourly history. It is not **Rebuild Energy
 statistics**: the retry does not delete any statistics or live-sensor history.
 `Data available through` always reports the latest timestamp actually returned
 by VS Chrudim; the integration does not assume an allowed portal delay.
+Home Assistant renders that timestamp entity relatively. **Latest portal
+reading** therefore displays the same value as an exact local date and time.
 
 Repeated portal responses are merged by timestamp, with a corrected value
 replacing the older value at that timestamp. The external-statistics builders
@@ -104,7 +106,8 @@ statistic IDs, so retrying does not create a second statistic series.
 
 Diagnostic entities show:
 
-- the newest timestamp contained in the latest successful portal download (`Data available through`),
+- the relative age of the newest portal timestamp (`Data available through`)
+  and its exact local date and time (`Latest portal reading`),
 - the time and result of the latest update attempt (`Last update attempt`),
 - three-year history progress, imported-hour count and the last backfill error (`History backfill status`).
 

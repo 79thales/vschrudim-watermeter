@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.13 - 2026-09-08
+
+- Add an exact local timestamp diagnostic for the newest reading returned by
+  the VS Chrudim portal, alongside Home Assistant's relative timestamp view.
+
 ## 0.4.12 - 2026-09-08
 
 - Automatically establish one fresh authenticated portal session and replay
