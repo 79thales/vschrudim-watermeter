@@ -363,6 +363,7 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
         coordinator._api_lock = asyncio.Lock()
         coordinator.client = SimpleNamespace(async_get_data=AsyncMock(return_value=data))
         coordinator.place = place
+        coordinator.entry = SimpleNamespace(options={})
         coordinator.last_test_download_at = None
         coordinator.last_test_download_result = "never"
         coordinator.last_test_download_error = None

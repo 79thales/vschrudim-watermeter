@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.15 - 2026-09-08
+
+- Fix the Home Assistant compatibility regression test for the isolated
+  no-side-effect download check.
+
 ## 0.4.14 - 2026-09-08
 
 - Add a concise source-status diagnostic, gap diagnostics and per-download
