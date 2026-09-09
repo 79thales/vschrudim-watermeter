@@ -1,8 +1,35 @@
-# VSChrudim watermeter
+# VSChrudim Watermeter pro Home Assistant
 
-Vlastní integrace pro Home Assistant, která načítá vzdálené odečty vodoměru ze zákaznického portálu VS Chrudim. Pro vybrané odběrné místo vytvoří zařízení se senzory kumulativního stavu vodoměru a poslední naměřené spotřeby.
+[![Home Assistant compatibility](https://img.shields.io/badge/Home%20Assistant-2026.8%20%26%202026.9%20tested-41BDF5?logo=home-assistant&logoColor=white)](https://github.com/79thales/vschrudim-watermeter/actions/workflows/validate.yml)
+[![HACS Integration](https://img.shields.io/badge/HACS-Integration-41BDF5?logo=home-assistant-community-store&logoColor=white)](https://hacs.xyz/)
+[![Latest release](https://img.shields.io/github/v/release/79thales/vschrudim-watermeter)](https://github.com/79thales/vschrudim-watermeter/releases/latest)
+[![HACS validation](https://img.shields.io/github/actions/workflow/status/79thales/vschrudim-watermeter/validate.yml?branch=main&label=HACS%20validation)](https://github.com/79thales/vschrudim-watermeter/actions/workflows/validate.yml)
+[![Hassfest](https://img.shields.io/github/actions/workflow/status/79thales/vschrudim-watermeter/validate.yml?branch=main&label=Hassfest)](https://github.com/79thales/vschrudim-watermeter/actions/workflows/validate.yml)
+[![Quality](https://img.shields.io/github/actions/workflow/status/79thales/vschrudim-watermeter/validate.yml?branch=main&label=Quality)](https://github.com/79thales/vschrudim-watermeter/actions/workflows/validate.yml)
 
-[English documentation](README.md)
+<p align="center">
+  <img src="custom_components/vschrudim_watermeter/brand/icon.png" alt="VSChrudim Watermeter" width="180">
+</p>
+
+## Český přehled
+
+VSChrudim Watermeter je nezávislá vlastní integrace pro Home Assistant. Načítá
+hodinové vzdálené odečty ze zákaznického portálu VS Chrudim, pro každé vybrané
+odběrné místo vytvoří jedno zařízení a odděluje živý stav vodoměru od
+importovaných statistik Energie.
+
+### Hlavní funkce
+
+- Kumulativní hodinové odečty, poslední spotřeba, nastavitelná cena vody a
+  živý přehled celkového nákladu.
+- Jediný externí zapisovač statistik integrace pro správnou historickou
+  spotřebu a náklady v panelu Energie.
+- Obnovitelné až tříleté doplnění historie s CSV, ověřeným ASP.NET WebForms
+  postbackem a deterministickou záložní tabulkou.
+- Diagnostika zařízení, bezpečná tlačítka údržby, historie pokusů o stažení,
+  obnova chybějících odečtů a standardní opětovné přihlášení Home Assistantu.
+
+[English documentation](README.md) · [Aktuální vydání](https://github.com/79thales/vschrudim-watermeter/releases/latest) · [Nahlásit problém](https://github.com/79thales/vschrudim-watermeter/issues)
 
 ## Instalace
 
@@ -10,7 +37,9 @@ V HACS přidejte tento repozitář jako **Custom repository** typu **Integration
 
 Při ruční instalaci zkopírujte složku `custom_components/vschrudim_watermeter` do `/config/custom_components/` a restartujte Home Assistant.
 
-## Nastavení a aktualizace
+## Konfigurace
+
+### Živé odečty a aktualizace
 
 Zadejte uživatelské jméno a heslo do portálu a vyberte odběrné místo. Výchozí interval aktualizace je jedna hodina, protože portál zaznamenává odečty po hodinách; lze ho změnit přes **Přenastavit** (minimálně 15 minut). Uložený uživatelský interval zůstává zachován i po aktualizaci integrace.
 
@@ -104,7 +133,31 @@ stejný idempotentní zápis zkusí po dalším úspěšném načtení portálu.
 historie neposune, dokud zápis statistik nebyl přijat. Automaticky nikdy
 nesmaže ani neobnoví statistiky.
 
-## Historická data
+## Senzory a entity zařízení
+
+Každé vybrané odběrné místo vytvoří jedno zařízení **VSChrudim watermeter**.
+ID entit přiřazuje Home Assistant; do nástěnek a automatizací vybírejte entity
+podle jejich zobrazených názvů.
+
+### Hlavní senzory
+
+- **Meter state** — aktuální kumulativní stav vodoměru v m³.
+- **Latest consumption** — nezáporný rozdíl mezi dvěma nejnovějšími stavy
+  portálu; nejde o okamžitý průtok.
+- **Water price** — nastavená celková cena v `CZK/m³`.
+- **Total water cost** — živý přehled nákladu v `CZK`; není zdrojem statistik
+  pro panel Energie.
+
+### Diagnostické senzory a tlačítka
+
+Zařízení dále obsahuje stav zdroje, čas odečtu portálu, počitadla chybějících
+odečtů a kvality stažení, poslední pokus o aktualizaci, stav doplnění historie,
+stav statistik Energie a stav registru vodoměru. Tlačítka **Otestovat
+stažení**, **Zkusit doplnit data** a **Zkontrolovat statistiky Energie** jsou
+bezpečné diagnostické akce. **Obnovit statistiky Energie** je potvrzená údržba
+popsaná níže.
+
+## Diagnostika, historie a obnova
 
 Po nastavení integrace automaticky prohledá až tři kalendářní roky zpět, včetně obou krajních dat, v 31denních blocích. Každý odečet zůstává samostatnou hodinovou statistikou; bloky pouze snižují počet požadavků na portál a data neagregují. Integrace používá stejná vlastní datumová pole ASP.NET WebForms jako WebDownloader, upřednostňuje ověřenou CSV odpověď a pokud portál nabídku exportu nezobrazí, načte vykreslenou tabulku naměřených stavů.
 
@@ -185,6 +238,20 @@ přihlašovací údaje nebo druhé vypršení stále použijí běžné opětovn
 Home Assistantu. Po po sobě jdoucích neúspěšných **automatických**
 aktualizacích se prodleva pokusu postupně, nejvýše do jedné hodiny, prodlouží.
 Tlačítko **Otestovat stažení** se tím nezdržuje.
+
+## Řešení potíží
+
+| Situace | Význam a doporučený postup |
+| --- | --- |
+| `Data stažena do` je starší | Jde o nejnovější čas skutečně vrácený portálem VS Chrudim. Starší data sama o sobě neznamenají chybu aktualizace. |
+| `Stav zdroje` je `authentication_required` | Dokončete opětovné přihlášení Home Assistantu platnými údaji portálu. |
+| `Stav zdroje` je `error` | Zkontrolujte **Last update attempt**, potom použijte **Otestovat stažení**. Integrace ponechá poslední platné odečty a požadavek zkusí znovu. |
+| Zůstávají chybějící hodinové odečty | Až portál data zveřejní, použijte **Zkusit doplnit data**. Tlačítko nemaže ani neobnovuje statistiky Energie. |
+| Součty v panelu Energie jsou po starší instalaci chybné | Ověřte vybrané integrační statistiky **Water consumption** a **Water cost**; potvrzenou obnovu spusťte pouze, je-li opravdu nutná. |
+
+Jediný workflow **Validate** spouští jednotkové testy, kontroly kompatibility
+Home Assistantu, Hassfest i validaci HACS. Badge nahoře ukazují stav této
+kompletní brány před vydáním.
 
 ## Kompatibilita s portálem
 

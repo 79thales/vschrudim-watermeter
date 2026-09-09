@@ -715,6 +715,49 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
         coordinator.client.async_get_data.assert_awaited_once_with(place)
         coordinator._handle_missing_hours_notification.assert_awaited_once_with((), 0)
 
+    def test_unchanged_successful_poll_publishes_fresh_diagnostics(self):
+        from custom_components.vschrudim_watermeter.coordinator import (
+            VsChrudimCoordinator,
+        )
+        from custom_components.vschrudim_watermeter.models import (
+            ConsumptionPlace,
+            MeterReading,
+            WaterMeterData,
+        )
+
+        place = ConsumptionPlace("test", "", "", "", "")
+        unchanged_data = WaterMeterData(
+            place,
+            (
+                MeterReading(datetime(2026, 9, 8, 14), 100.0),
+                MeterReading(datetime(2026, 9, 8, 15), 100.1),
+            ),
+            0.1,
+        )
+        coordinator = object.__new__(VsChrudimCoordinator)
+        coordinator._api_lock = asyncio.Lock()
+        coordinator.client = SimpleNamespace(
+            async_get_data=AsyncMock(return_value=unchanged_data)
+        )
+        coordinator.place = place
+        coordinator.entry = SimpleNamespace(
+            options={"missing_retry_attempts": 0, "retry_delay": 5}
+        )
+        coordinator.hass = SimpleNamespace(loop=SimpleNamespace(call_soon=Mock()))
+        coordinator.data = unchanged_data
+        coordinator._known_readings = ()
+        coordinator._consecutive_failures = 0
+        coordinator._set_source_status = AsyncMock()
+        coordinator._handle_missing_hours_notification = AsyncMock()
+        coordinator._async_import_readings = AsyncMock()
+        coordinator._async_record_download_attempt = AsyncMock()
+        coordinator.async_update_listeners = Mock()
+        coordinator.history_backfill_status = "not_started"
+
+        asyncio.run(coordinator._async_update_data())
+
+        coordinator.async_update_listeners.assert_called_once_with()
+
     def test_failed_download_keeps_known_readings_unchanged(self):
         from homeassistant.helpers.update_coordinator import UpdateFailed
         from custom_components.vschrudim_watermeter.api import VsChrudimProtocolError

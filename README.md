@@ -1,8 +1,36 @@
-# VSChrudim watermeter
+# VSChrudim Watermeter for Home Assistant
 
-Home Assistant custom integration for remote water-meter readings shown in the VS Chrudim customer portal. It creates a device for one selected consumption place and sensors for its cumulative meter state and latest measured consumption.
+[![Home Assistant compatibility](https://img.shields.io/badge/Home%20Assistant-2026.8%20%26%202026.9%20tested-41BDF5?logo=home-assistant&logoColor=white)](https://github.com/79thales/vschrudim-watermeter/actions/workflows/validate.yml)
+[![HACS Integration](https://img.shields.io/badge/HACS-Integration-41BDF5?logo=home-assistant-community-store&logoColor=white)](https://hacs.xyz/)
+[![Latest release](https://img.shields.io/github/v/release/79thales/vschrudim-watermeter)](https://github.com/79thales/vschrudim-watermeter/releases/latest)
+[![HACS validation](https://img.shields.io/github/actions/workflow/status/79thales/vschrudim-watermeter/validate.yml?branch=main&label=HACS%20validation)](https://github.com/79thales/vschrudim-watermeter/actions/workflows/validate.yml)
+[![Hassfest](https://img.shields.io/github/actions/workflow/status/79thales/vschrudim-watermeter/validate.yml?branch=main&label=Hassfest)](https://github.com/79thales/vschrudim-watermeter/actions/workflows/validate.yml)
+[![Quality](https://img.shields.io/github/actions/workflow/status/79thales/vschrudim-watermeter/validate.yml?branch=main&label=Quality)](https://github.com/79thales/vschrudim-watermeter/actions/workflows/validate.yml)
 
-[Česká verze dokumentace](README.cs.md)
+<p align="center">
+  <img src="custom_components/vschrudim_watermeter/brand/icon.png" alt="VSChrudim Watermeter" width="180">
+</p>
+
+## English overview
+
+VSChrudim Watermeter is an independent Home Assistant custom integration for
+hourly remote water-meter readings from the authenticated VS Chrudim customer
+portal. It creates one device per selected consumption place, keeps the live
+meter state separate from imported Energy statistics, and retains a
+privacy-safe diagnostic history for troubleshooting portal delays or changes.
+
+### Highlights
+
+- Hourly cumulative meter readings, latest consumption, configurable water
+  price, and live total water-cost display.
+- A single integration-owned external-statistics writer for accurate Home
+  Assistant Energy consumption and historical cost charts.
+- Resumable three-year history reconciliation with CSV, verified ASP.NET
+  WebForms postback, and deterministic rendered-table fallbacks.
+- Device diagnostics, safe maintenance buttons, download-attempt history,
+  missing-reading recovery, and normal Home Assistant reauthentication.
+
+[Česká verze dokumentace](README.cs.md) · [Latest release](https://github.com/79thales/vschrudim-watermeter/releases/latest) · [Report an issue](https://github.com/79thales/vschrudim-watermeter/issues)
 
 ## Installation
 
@@ -10,7 +38,9 @@ In HACS, add this repository as a **Custom repository** of type **Integration**,
 
 For a manual installation, copy `custom_components/vschrudim_watermeter` to `/config/custom_components/` and restart Home Assistant.
 
-## Setup and updates
+## Configuration
+
+### Live readings and updates
 
 Enter the portal username and password, then select a consumption place. The default update interval is one hour, matching the portal's hourly reading resolution; it can be changed in Reconfigure (minimum 15 minutes). An interval already saved by the user is preserved during upgrades.
 
@@ -106,7 +136,31 @@ checkpoint and retries the same idempotent external statistics after a later
 successful portal update. A history-backfill block is not advanced until its
 statistics write is accepted. No automatic clear or rebuild is ever performed.
 
-## Historical data
+## Sensors and device entities
+
+Each selected consumption place creates one **VSChrudim watermeter** device.
+The entity IDs are assigned by Home Assistant; use the displayed entity names
+when selecting them in dashboards or automations.
+
+### Main sensors
+
+- **Meter state** — current cumulative water-meter state in m³.
+- **Latest consumption** — non-negative difference between the newest two
+  portal states; it is not an instantaneous flow rate.
+- **Water price** — configured all-in price in `CZK/m³`.
+- **Total water cost** — current live cost display in `CZK`; it is not an
+  Energy Dashboard statistic source.
+
+### Diagnostic sensors and buttons
+
+The device also exposes source status, portal-reading time, missing-reading and
+download-quality counters, the latest update attempt, backfill status,
+Energy-statistics status, and meter-register status. The **Test download**,
+**Retry history download**, and **Check Energy statistics** buttons are safe
+diagnostic actions. **Rebuild Energy statistics** is the explicitly confirmed
+maintenance action described below.
+
+## Diagnostics, history, and recovery
 
 After setup, the integration automatically scans up to three calendar years backwards in inclusive 31-day HTTP blocks. Every portal reading remains an individual hourly statistic; the blocks only reduce the number of requests and do not aggregate the data. The integration uses the same custom-date WebForms controls as WebDownloader, prefers the validated CSV response and falls back to the rendered measured-state table when the portal omits its export control. It validates that each non-empty result overlaps the requested range, imports only completed hours, and checkpoints progress after every block. An interrupted or failed scan resumes from its saved cursor; portal requests are serialized with normal polling and retried using the configured recovery settings.
 
@@ -185,6 +239,20 @@ the client creates one fresh session and replays the complete request; rejected
 credentials and a second expiry still use Home Assistant's normal
 reauthentication flow. Consecutive failed **automatic** updates use a bounded
 exponential retry delay. This does not delay the **Test download** button.
+
+## Troubleshooting
+
+| Situation | Meaning and recommended action |
+| --- | --- |
+| `Data available through` is old | It is the newest timestamp actually returned by VS Chrudim. Old portal data is not automatically a failed update. |
+| `Source status` is `authentication_required` | Complete Home Assistant reauthentication with valid portal credentials. |
+| `Source status` is `error` | Check **Last update attempt**, then use **Test download**. The integration preserves the last valid readings while the portal request is retried. |
+| Missing hourly readings remain | Use **Retry history download** after the portal has published the missing data. The button does not clear or rebuild Energy statistics. |
+| Energy Dashboard totals are wrong after an older installation | Verify the selected integration-owned **Water consumption** and **Water cost** statistics, then use the confirmed rebuild procedure only if required. |
+
+The single **Validate** workflow runs unit tests, Home Assistant compatibility
+checks, Hassfest, and HACS validation. Its badges above show the status of that
+complete release gate.
 
 ## Portal compatibility
 

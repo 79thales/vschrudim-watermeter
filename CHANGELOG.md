@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.21 - 2026-09-09
+
+- Refresh the diagnostic entities after every successful unchanged portal
+  poll. `Last update attempt` now shows the real polling time even while VS
+  Chrudim exposes the same latest reading; live meter values and Energy
+  statistics remain untouched.
+
 ## 0.4.20 - 2026-09-08
 
 - Keep Energy-statistics health visible in the device diagnostics and its

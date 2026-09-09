@@ -596,6 +596,14 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
                     self.async_start_history_backfill,
                     True,
                 )
+            if result == getattr(self, "data", None):
+                # DataUpdateCoordinator intentionally suppresses listener
+                # updates for equal data when ``always_update`` is false. The
+                # portal may legitimately return the same newest reading for
+                # many hours, but diagnostics still need to show the actual
+                # successful polling time. Publish only in that equal-data
+                # case so changed readings retain the normal coordinator path.
+                self.async_update_listeners()
             return result
         except VsChrudimAuthError as err:
             self.last_attempt_result = "authentication_failed"
