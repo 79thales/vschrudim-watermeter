@@ -7,6 +7,7 @@ from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import VsChrudimCoordinator
@@ -28,7 +29,9 @@ async def async_setup_entry(
     )
 
 
-class RetryHistoryDownloadButton(ButtonEntity):
+class RetryHistoryDownloadButton(
+    CoordinatorEntity[VsChrudimCoordinator], ButtonEntity
+):
     """Request an immediate, idempotent retry of portal data download."""
 
     _attr_has_entity_name = True
@@ -37,7 +40,7 @@ class RetryHistoryDownloadButton(ButtonEntity):
     _attr_icon = "mdi:cloud-download-outline"
 
     def __init__(self, coordinator: VsChrudimCoordinator) -> None:
-        self.coordinator = coordinator
+        super().__init__(coordinator)
         identifier = coordinator.place.identifier
         self._attr_unique_id = f"{identifier}_retry_history_download"
         self._attr_device_info = DeviceInfo(
@@ -60,7 +63,7 @@ class RetryHistoryDownloadButton(ButtonEntity):
         await self.coordinator.async_retry_history_download()
 
 
-class TestDownloadButton(ButtonEntity):
+class TestDownloadButton(CoordinatorEntity[VsChrudimCoordinator], ButtonEntity):
     """Check authentication and a current portal download without side effects."""
 
     _attr_has_entity_name = True
@@ -69,7 +72,7 @@ class TestDownloadButton(ButtonEntity):
     _attr_icon = "mdi:connection"
 
     def __init__(self, coordinator: VsChrudimCoordinator) -> None:
-        self.coordinator = coordinator
+        super().__init__(coordinator)
         identifier = coordinator.place.identifier
         self._attr_unique_id = f"{identifier}_test_download"
         self._attr_device_info = DeviceInfo(
@@ -87,7 +90,9 @@ class TestDownloadButton(ButtonEntity):
         await self.coordinator.async_test_download()
 
 
-class RebuildEnergyStatisticsButton(ButtonEntity):
+class RebuildEnergyStatisticsButton(
+    CoordinatorEntity[VsChrudimCoordinator], ButtonEntity
+):
     """Rebuild integration-owned Energy statistics after source preflight."""
 
     _attr_has_entity_name = True
@@ -96,7 +101,7 @@ class RebuildEnergyStatisticsButton(ButtonEntity):
     _attr_icon = "mdi:database-sync"
 
     def __init__(self, coordinator: VsChrudimCoordinator) -> None:
-        self.coordinator = coordinator
+        super().__init__(coordinator)
         identifier = coordinator.place.identifier
         self._attr_unique_id = f"{identifier}_rebuild_energy_statistics"
         self._attr_device_info = DeviceInfo(
@@ -116,7 +121,9 @@ class RebuildEnergyStatisticsButton(ButtonEntity):
         await self.coordinator.async_rebuild_energy_statistics(confirm=True)
 
 
-class CheckEnergyStatisticsButton(ButtonEntity):
+class CheckEnergyStatisticsButton(
+    CoordinatorEntity[VsChrudimCoordinator], ButtonEntity
+):
     """Read-only comparison of portal-derived and Recorder statistics."""
 
     _attr_has_entity_name = True
@@ -125,7 +132,7 @@ class CheckEnergyStatisticsButton(ButtonEntity):
     _attr_icon = "mdi:database-check-outline"
 
     def __init__(self, coordinator: VsChrudimCoordinator) -> None:
-        self.coordinator = coordinator
+        super().__init__(coordinator)
         identifier = coordinator.place.identifier
         self._attr_unique_id = f"{identifier}_check_energy_statistics"
         self._attr_device_info = DeviceInfo(

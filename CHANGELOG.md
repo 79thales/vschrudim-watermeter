@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.22 - 2026-09-11
+
+- Refresh maintenance-button availability after a history task actually
+  finishes, so `Retry history download` cannot remain visually disabled.
+- Allow Recorder up to 15.5 seconds of bounded backoff to expose newly queued
+  external statistics before classifying their verification as pending.
+- Pause an unverified history block without advancing its cursor, creating a
+  failure notification or changing live readings; a later successful update
+  safely retries the same idempotent block.
+
 ## 0.4.21 - 2026-09-09
 
 - Refresh the diagnostic entities after every successful unchanged portal

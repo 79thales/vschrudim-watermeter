@@ -374,6 +374,7 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
 
     def test_retry_history_button_does_not_rebuild_statistics(self):
         from homeassistant.const import EntityCategory
+        from homeassistant.helpers.update_coordinator import CoordinatorEntity
         from custom_components.vschrudim_watermeter.button import (
             RetryHistoryDownloadButton,
         )
@@ -387,6 +388,11 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
         button = RetryHistoryDownloadButton(coordinator)
 
         self.assertEqual(button.entity_category, EntityCategory.DIAGNOSTIC)
+        self.assertIsInstance(button, CoordinatorEntity)
+        self.assertTrue(button.available)
+        coordinator.history_backfill_running = True
+        self.assertFalse(button.available)
+        coordinator.history_backfill_running = False
         self.assertTrue(button.available)
         asyncio.run(button.async_press())
         coordinator.async_retry_history_download.assert_awaited_once_with()
@@ -578,6 +584,118 @@ class HomeAssistantCompatibilityTests(unittest.TestCase):
         )
         self.assertEqual(coordinator.history_backfill_imported_hours, 0)
         coordinator._async_fail_history_backfill.assert_awaited_once()
+
+    def test_backfill_verification_pending_pauses_without_failure(self):
+        from custom_components.vschrudim_watermeter.coordinator import (
+            VsChrudimCoordinator,
+        )
+        from custom_components.vschrudim_watermeter.models import MeterReading
+        from custom_components.vschrudim_watermeter.statistics_health import (
+            StatisticsImportResult,
+        )
+
+        async def run_backfill():
+            coordinator = object.__new__(VsChrudimCoordinator)
+            coordinator._api_lock = asyncio.Lock()
+            coordinator.client = SimpleNamespace(
+                async_get_history=AsyncMock(
+                    return_value=(
+                        MeterReading(datetime(2026, 1, 1, 10), 100.0),
+                    )
+                )
+            )
+            coordinator.place = SimpleNamespace()
+            coordinator.entry = SimpleNamespace(options={})
+            coordinator._known_readings = ()
+            coordinator.history_backfill_scan_start = datetime(2026, 1, 1).date()
+            coordinator.history_backfill_cursor = datetime(2026, 1, 1).date()
+            coordinator.history_earliest_date = None
+            coordinator.history_backfill_imported_hours = 0
+            coordinator.history_backfill_processed_chunks = 0
+            coordinator._async_save_history_state = AsyncMock()
+            coordinator._async_import_readings = AsyncMock(
+                return_value=StatisticsImportResult(
+                    accepted=False,
+                    error_type="StatisticsVerificationPending",
+                    error="Energy statistics write was not verified",
+                )
+            )
+            coordinator._async_pause_history_backfill_for_statistics = AsyncMock()
+            coordinator._async_fail_history_backfill = AsyncMock()
+            await coordinator._async_backfill_history()
+            return coordinator
+
+        coordinator = asyncio.run(run_backfill())
+        self.assertEqual(
+            coordinator.history_backfill_cursor, datetime(2026, 1, 1).date()
+        )
+        self.assertEqual(coordinator.history_backfill_imported_hours, 0)
+        coordinator._async_pause_history_backfill_for_statistics.assert_awaited_once_with(
+            "Energy statistics write was not verified"
+        )
+        coordinator._async_fail_history_backfill.assert_not_awaited()
+
+    def test_backfill_verification_waits_for_delayed_recorder_commit(self):
+        from custom_components.vschrudim_watermeter import coordinator as module
+        from custom_components.vschrudim_watermeter.coordinator import (
+            VsChrudimCoordinator,
+        )
+        from custom_components.vschrudim_watermeter.models import MeterReading
+        from custom_components.vschrudim_watermeter.statistics_health import (
+            EnergyStatisticsHealth,
+        )
+
+        coordinator = object.__new__(VsChrudimCoordinator)
+        start = datetime(2026, 1, 1, 10, tzinfo=ZoneInfo("Europe/Prague"))
+        coordinator._expected_energy_statistics = Mock(
+            return_value=([{"start": start}], [{"start": start}])
+        )
+        coordinator._async_read_energy_statistics = AsyncMock(
+            return_value=([], [])
+        )
+        coordinator._async_publish_energy_statistics_health = AsyncMock()
+        sleep = AsyncMock()
+
+        with (
+            patch.object(
+                module,
+                "assess_energy_statistics",
+                side_effect=[
+                    EnergyStatisticsHealth(status="incomplete"),
+                    EnergyStatisticsHealth(status="incomplete"),
+                    EnergyStatisticsHealth(status="ok"),
+                ],
+            ),
+            patch.object(module.asyncio, "sleep", sleep),
+        ):
+            verified = asyncio.run(
+                coordinator._async_verify_statistics_points(
+                    (MeterReading(datetime(2026, 1, 1, 10), 100.0),)
+                )
+            )
+
+        self.assertTrue(verified)
+        self.assertEqual(coordinator._async_read_energy_statistics.await_count, 3)
+        self.assertEqual(
+            [call.args[0] for call in sleep.await_args_list],
+            [0.5, 1.0],
+        )
+        coordinator._async_publish_energy_statistics_health.assert_not_awaited()
+
+    def test_finished_backfill_task_refreshes_button_availability(self):
+        from custom_components.vschrudim_watermeter.coordinator import (
+            VsChrudimCoordinator,
+        )
+
+        coordinator = object.__new__(VsChrudimCoordinator)
+        task = Mock()
+        coordinator._history_backfill_task = task
+        coordinator.async_update_listeners = Mock()
+
+        coordinator._history_backfill_done(task)
+
+        self.assertIsNone(coordinator._history_backfill_task)
+        coordinator.async_update_listeners.assert_called_once_with()
 
     def test_statistics_state_store_load_is_tolerant_and_does_not_keep_readings(self):
         from custom_components.vschrudim_watermeter.coordinator import (

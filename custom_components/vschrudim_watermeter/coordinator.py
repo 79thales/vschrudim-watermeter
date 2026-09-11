@@ -71,6 +71,7 @@ _NOTIFICATION_STORE_VERSION = 1
 _STATISTICS_STATE_STORE_VERSION = 1
 _BACKFILL_REQUEST_DELAY = 2
 _STATISTICS_OPERATION_TIMEOUT = 30
+_STATISTICS_VERIFICATION_DELAYS = (0.5, 1.0, 2.0, 4.0, 8.0)
 _MAX_FAILURE_RETRY_SECONDS = 60 * 60
 _SOURCE_STATUSES = frozenset(
     {"unknown", "ok", "delayed_data", "authentication_required", "error"}
@@ -794,7 +795,9 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
             start = min(expected_starts)
             end = max(expected_starts) + timedelta(hours=1)
             health: EnergyStatisticsHealth | None = None
-            for verification_attempt in range(6):
+            for verification_delay in (0.0, *_STATISTICS_VERIFICATION_DELAYS):
+                if verification_delay:
+                    await asyncio.sleep(verification_delay)
                 consumption_rows, cost_rows = await self._async_read_energy_statistics(
                     start=start, end=end
                 )
@@ -809,8 +812,6 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
                 )
                 if health.status == "ok":
                     return True
-                if verification_attempt < 5:
-                    await asyncio.sleep(0.2)
             assert health is not None
         except asyncio.CancelledError:
             raise
@@ -1580,6 +1581,11 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
     def _history_backfill_done(self, task: asyncio.Task[None]) -> None:
         if self._history_backfill_task is task:
             self._history_backfill_task = None
+            # Availability of the history-retry button depends on the live
+            # task, not only on the persisted status. Publish once more after
+            # the task has actually finished so the button cannot remain
+            # visually disabled with a stale state.
+            self.async_update_listeners()
 
     async def _async_backfill_history(self) -> None:
         """Fetch, import and checkpoint monthly ranges from newest to oldest."""
@@ -1642,10 +1648,19 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
                     # external statistic write was not accepted. The next
                     # successful portal update will resume the same safe,
                     # idempotent block without deleting anything.
-                    raise HomeAssistantError(
+                    error = (
                         statistics_result.error
                         or "Energy statistics write is pending"
                     )
+                    if (
+                        statistics_result.error_type
+                        == "StatisticsVerificationPending"
+                    ):
+                        await self._async_pause_history_backfill_for_statistics(
+                            error
+                        )
+                        return
+                    raise HomeAssistantError(error)
                 self.history_backfill_imported_hours += (
                     statistics_result.written_points
                 )
@@ -1693,6 +1708,18 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
         async_dismiss(self.hass, self._history_notification_id)
         await self._async_save_history_state()
         self.async_update_listeners()
+
+    async def _async_pause_history_backfill_for_statistics(
+        self, error: str
+    ) -> None:
+        """Keep the current cursor while Recorder commits queued statistics."""
+        self.history_backfill_status = "paused"
+        self.history_backfill_error = sanitize_error_message(error)
+        await self._async_save_history_state()
+        self.async_update_listeners()
+        _LOGGER.info(
+            "Paused water-meter history until Recorder verifies queued statistics"
+        )
 
     async def _async_fail_history_backfill(self, error: str) -> None:
         self.history_backfill_status = "failed"
