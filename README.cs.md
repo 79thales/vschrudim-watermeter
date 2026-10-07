@@ -3,6 +3,8 @@
 [![Home Assistant compatibility](https://img.shields.io/badge/Home%20Assistant-2026.8%20%26%202026.9%20tested-41BDF5?logo=home-assistant&logoColor=white)](https://github.com/79thales/vschrudim-watermeter/actions/workflows/validate.yml)
 [![HACS Integration](https://img.shields.io/badge/HACS-Integration-41BDF5?logo=home-assistant-community-store&logoColor=white)](https://hacs.xyz/)
 [![Latest release](https://img.shields.io/github/v/release/79thales/vschrudim-watermeter)](https://github.com/79thales/vschrudim-watermeter/releases/latest)
+[![Stažení instalačního balíčku celkem](https://img.shields.io/github/downloads/79thales/vschrudim-watermeter/vschrudim_watermeter.zip?label=Sta%C5%BEen%C3%AD%20celkem&displayAssetName=false)](https://github.com/79thales/vschrudim-watermeter/releases)
+[![Stažení posledního vydání](https://img.shields.io/github/downloads/79thales/vschrudim-watermeter/latest/vschrudim_watermeter.zip?label=Posledn%C3%AD%20vyd%C3%A1n%C3%AD&displayAssetName=false)](https://github.com/79thales/vschrudim-watermeter/releases/latest)
 [![HACS validation](https://img.shields.io/github/actions/workflow/status/79thales/vschrudim-watermeter/validate.yml?branch=main&label=HACS%20validation)](https://github.com/79thales/vschrudim-watermeter/actions/workflows/validate.yml)
 [![Hassfest](https://img.shields.io/github/actions/workflow/status/79thales/vschrudim-watermeter/validate.yml?branch=main&label=Hassfest)](https://github.com/79thales/vschrudim-watermeter/actions/workflows/validate.yml)
 [![Quality](https://img.shields.io/github/actions/workflow/status/79thales/vschrudim-watermeter/validate.yml?branch=main&label=Quality)](https://github.com/79thales/vschrudim-watermeter/actions/workflows/validate.yml)
@@ -36,6 +38,12 @@ importovaných statistik Energie.
 V HACS přidejte tento repozitář jako **Custom repository** typu **Integration**, integraci stáhněte a restartujte Home Assistant. Poté přejděte do **Nastavení → Zařízení a služby → Přidat integraci → VSChrudim watermeter**.
 
 Při ruční instalaci zkopírujte složku `custom_components/vschrudim_watermeter` do `/config/custom_components/` a restartujte Home Assistant.
+
+Od v0.4.23 HACS používá instalační přílohu `vschrudim_watermeter.zip`. Při ruční instalaci ji lze rozbalit přímo do `custom_components/vschrudim_watermeter`; `manifest.json` musí být přímo v této složce. Automatický GitHub archiv **Source code (zip)** má jinou strukturu. Starší vydání se nadále instalují původním způsobem.
+
+### Počet stažení
+
+Odznaky počítají pouze stažení instalačního ZIPu včetně opakovaných stažení a aktualizací, nikoli uživatele či aktivní instalace. Horní ikona v HACS patří vybranému vydání, odznak celkových stažení sčítá balíčky všech vydání. Počítání začíná v0.4.23; starší stažení, zdrojové archivy, výchozí větev ani exporty vodoměru se nezapočítávají. Cache může zobrazení zpozdit. Integrace kvůli tomu neposílá přihlašovací údaje, odečty ani telemetrii. Postup vydávání popisuje [dokumentace balíčkování](scripts/README.md).
 
 ## Konfigurace
 

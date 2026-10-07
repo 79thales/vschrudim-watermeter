@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.23 – 2026-10-07
+
+### Čeština
+
+- Instalační příloha `vschrudim_watermeter.zip` pro HACS a odznaky celkových stažení i posledního vydání v anglickém a českém README. Počítání začíná touto verzí a zahrnuje stažení balíčku a aktualizace, nikoli unikátní uživatele.
+- Horní počet v HACS patří vybranému vydání. Starší stažení bez přílohy nelze zpětně dopočítat; zdrojové archivy, instalace výchozí větve a exporty vodoměru se do odznaků nezapočítávají.
+- Automatické balíčkování z přesného Git commitu nejdříve vytvoří koncept release s ověřeným ZIPem a českými i anglickými poznámkami. Zveřejněné přílohy nepřepisuje a nebalí místní přihlášení, odečty ani data Home Assistantu.
+- Bez změn načítání portálu, živých odečtů, statistik, obnovy historie, entit nebo uložených dat; bez nové telemetrie. Starší vydání si zachovávají původní způsob instalace.
+
+### English
+
+- A HACS installer asset, `vschrudim_watermeter.zip`, and total/latest-release installer download badges in both English and Czech READMEs. Counting starts with this version and includes downloads and updates, not unique users.
+- HACS's download indicator covers the selected release. Earlier downloads without an installer asset cannot be recovered; source-code archives, default-branch installations and meter exports are excluded from the badges.
+- The packaging workflow builds from the exact Git commit and first creates a draft with a verified installer and Czech/English release notes. It never overwrites published assets or packages local credentials, readings or Home Assistant data.
+- No changes to portal requests, live readings, statistics, history recovery, entities or retained data, and no added telemetry. Older releases retain their original installation method.
+
 ## 0.4.22 - 2026-09-11
 
 - Refresh maintenance-button availability after a history task actually

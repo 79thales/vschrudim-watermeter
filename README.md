@@ -3,6 +3,8 @@
 [![Home Assistant compatibility](https://img.shields.io/badge/Home%20Assistant-2026.8%20%26%202026.9%20tested-41BDF5?logo=home-assistant&logoColor=white)](https://github.com/79thales/vschrudim-watermeter/actions/workflows/validate.yml)
 [![HACS Integration](https://img.shields.io/badge/HACS-Integration-41BDF5?logo=home-assistant-community-store&logoColor=white)](https://hacs.xyz/)
 [![Latest release](https://img.shields.io/github/v/release/79thales/vschrudim-watermeter)](https://github.com/79thales/vschrudim-watermeter/releases/latest)
+[![Installer downloads, all releases](https://img.shields.io/github/downloads/79thales/vschrudim-watermeter/vschrudim_watermeter.zip?label=Downloads%20total&displayAssetName=false)](https://github.com/79thales/vschrudim-watermeter/releases)
+[![Installer downloads, latest release](https://img.shields.io/github/downloads/79thales/vschrudim-watermeter/latest/vschrudim_watermeter.zip?label=Downloads%20latest&displayAssetName=false)](https://github.com/79thales/vschrudim-watermeter/releases/latest)
 [![HACS validation](https://img.shields.io/github/actions/workflow/status/79thales/vschrudim-watermeter/validate.yml?branch=main&label=HACS%20validation)](https://github.com/79thales/vschrudim-watermeter/actions/workflows/validate.yml)
 [![Hassfest](https://img.shields.io/github/actions/workflow/status/79thales/vschrudim-watermeter/validate.yml?branch=main&label=Hassfest)](https://github.com/79thales/vschrudim-watermeter/actions/workflows/validate.yml)
 [![Quality](https://img.shields.io/github/actions/workflow/status/79thales/vschrudim-watermeter/validate.yml?branch=main&label=Quality)](https://github.com/79thales/vschrudim-watermeter/actions/workflows/validate.yml)
@@ -37,6 +39,12 @@ privacy-safe diagnostic history for troubleshooting portal delays or changes.
 In HACS, add this repository as a **Custom repository** of type **Integration**, download it, and restart Home Assistant. Then go to **Settings → Devices & services → Add integration → VSChrudim watermeter**.
 
 For a manual installation, copy `custom_components/vschrudim_watermeter` to `/config/custom_components/` and restart Home Assistant.
+
+From v0.4.23, HACS installs the `vschrudim_watermeter.zip` release asset. For manual installation from this ZIP, extract its contents directly into `custom_components/vschrudim_watermeter`, with `manifest.json` at that directory's root. GitHub's automatic **Source code (zip)** archive has a different layout. Older releases retain their original installation method.
+
+### Installer downloads
+
+The badges count only installer downloads, including manual downloads and updates, not unique users or active installations. HACS's indicator covers the selected release; the total badge combines installer downloads across releases. Counting starts with v0.4.23. Earlier downloads, source-code archives, default-branch installations and water-meter exports are excluded. Cached counts may take time to refresh. No account details, meter readings or usage telemetry are sent by the integration for these counters. See [release packaging](scripts/README.md) for the maintainer workflow.
 
 ## Configuration
 

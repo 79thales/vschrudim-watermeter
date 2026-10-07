@@ -5,3 +5,4 @@ __pycache__/
 .storage/
 .env
 .vs/
+dist/
