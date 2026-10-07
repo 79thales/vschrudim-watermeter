@@ -1,16 +1,14 @@
 # VSChrudim Watermeter pro Home Assistant
 
-[![Home Assistant compatibility](https://img.shields.io/badge/Home%20Assistant-2026.8%20%26%202026.9%20tested-41BDF5?logo=home-assistant&logoColor=white)](https://github.com/79thales/vschrudim-watermeter/actions/workflows/validate.yml)
-[![HACS Integration](https://img.shields.io/badge/HACS-Integration-41BDF5?logo=home-assistant-community-store&logoColor=white)](https://hacs.xyz/)
-[![Latest release](https://img.shields.io/github/v/release/79thales/vschrudim-watermeter)](https://github.com/79thales/vschrudim-watermeter/releases/latest)
-[![Stažení instalačního balíčku celkem](https://img.shields.io/github/downloads/79thales/vschrudim-watermeter/vschrudim_watermeter.zip?label=Sta%C5%BEen%C3%AD%20celkem&displayAssetName=false)](https://github.com/79thales/vschrudim-watermeter/releases)
-[![Stažení posledního vydání](https://img.shields.io/github/downloads/79thales/vschrudim-watermeter/latest/vschrudim_watermeter.zip?label=Posledn%C3%AD%20vyd%C3%A1n%C3%AD&displayAssetName=false)](https://github.com/79thales/vschrudim-watermeter/releases/latest)
-[![HACS validation](https://img.shields.io/github/actions/workflow/status/79thales/vschrudim-watermeter/validate.yml?branch=main&label=HACS%20validation)](https://github.com/79thales/vschrudim-watermeter/actions/workflows/validate.yml)
-[![Hassfest](https://img.shields.io/github/actions/workflow/status/79thales/vschrudim-watermeter/validate.yml?branch=main&label=Hassfest)](https://github.com/79thales/vschrudim-watermeter/actions/workflows/validate.yml)
-[![Quality](https://img.shields.io/github/actions/workflow/status/79thales/vschrudim-watermeter/validate.yml?branch=main&label=Quality)](https://github.com/79thales/vschrudim-watermeter/actions/workflows/validate.yml)
+[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.8.0%2B-41BDF5?logo=home-assistant&logoColor=white&style=flat)](https://www.home-assistant.io/)
+[![HACS Integration](https://img.shields.io/badge/HACS-Integration-41BDF5?logo=home-assistant-community-store&logoColor=white&style=flat)](https://my.home-assistant.io/redirect/hacs_repository/?owner=79thales&repository=vschrudim-watermeter&category=integration)
+[![Latest release](https://img.shields.io/github/v/release/79thales/vschrudim-watermeter?label=Release&logo=github&style=flat)](https://github.com/79thales/vschrudim-watermeter/releases/latest)
+[![Installer downloads, all releases](https://img.shields.io/github/downloads/79thales/vschrudim-watermeter/vschrudim_watermeter.zip?label=Downloads%20total&displayAssetName=false&logo=github&style=flat)](https://github.com/79thales/vschrudim-watermeter/releases)
+[![Installer downloads, latest release](https://img.shields.io/github/downloads/79thales/vschrudim-watermeter/latest/vschrudim_watermeter.zip?label=Downloads%20latest&displayAssetName=false&logo=github&style=flat)](https://github.com/79thales/vschrudim-watermeter/releases/latest)
+[![Validation](https://img.shields.io/github/check-suites/79thales/vschrudim-watermeter/main?label=Validation&logo=github&style=flat)](https://github.com/79thales/vschrudim-watermeter/actions)
 
 <p align="center">
-  <img src="custom_components/vschrudim_watermeter/brand/icon.png" alt="VSChrudim Watermeter" width="180">
+  <img src="https://raw.githubusercontent.com/79thales/vschrudim-watermeter/main/custom_components/vschrudim_watermeter/brand/icon.png" alt="VSChrudim Watermeter" width="180">
 </p>
 
 ## Český přehled
