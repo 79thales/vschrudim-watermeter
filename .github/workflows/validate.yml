@@ -11,6 +11,21 @@ permissions:
   contents: read
 
 jobs:
+  latest-home-assistant:
+    name: Latest stable Home Assistant compatibility
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - name: Install exact latest stable HA from PyPI
+        run: |
+          requirement="$(python scripts/latest_ha_requirement.py)"
+          python -m pip install "$requirement"
+      - name: Run compatibility checks without skipping HA
+        run: python -m unittest tests.test_home_assistant_compatibility -v
+
   tests:
     runs-on: ubuntu-latest
     steps:

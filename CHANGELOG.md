@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.24 – 2026-10-07
+
+### Čeština
+
+- Jednotné odznaky Home Assistant, HACS, Release, Downloads total, Downloads latest a Validation jsou nyní součástí vydaného tagu, nejen hlavní větve.
+- Absolutní odkazy na loga a jednotná šířka 180 px pro správné zobrazení README v HACS.
+- HACS zobrazuje dokumentaci nainstalované verze. Pro nový vzhled aktualizujte integraci na toto vydání; samotné obnovení cache staré README nezmění.
+- Regresní kontrola úplné hlavičky README v release CI a kontrola kompatibility s přesně zjištěnou nejnovější stabilní verzí Home Assistantu.
+- Bez změn funkční logiky, ID entit, nastavení nebo uložených dat. Staré tagy a ZIPy zůstávají zachované včetně počtů stažení.
+
+### English
+
+- The unified Home Assistant, HACS, Release, Downloads total, Downloads latest and Validation badges are now included in the release tag, not only the default branch.
+- Absolute logo URLs and a consistent 180 px width fix README rendering in HACS.
+- HACS displays documentation for the installed version. Update to this release to see the new header; refreshing the cache alone does not change an older release's README.
+- Added a release CI regression for the complete README header and a compatibility check against the exact latest stable Home Assistant version.
+- No changes to functional behavior, entity IDs, configuration or retained data. Existing tags and ZIP assets remain intact, preserving their download counts.
+
 ## 0.4.23 – 2026-10-07
 
 ### Čeština

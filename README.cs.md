@@ -11,6 +11,8 @@
   <img src="https://raw.githubusercontent.com/79thales/vschrudim-watermeter/main/custom_components/vschrudim_watermeter/brand/icon.png" alt="VSChrudim Watermeter" width="180">
 </p>
 
+HACS zobrazuje dokumentaci nainstalované verze. Jednotná hlavička je součástí vydání v0.4.24. Pro její zobrazení aktualizujte integraci v HACS; obnovení stránky ani změna pouze v hlavní větvi README staršího vydání nezmění.
+
 ## Český přehled
 
 VSChrudim Watermeter je nezávislá vlastní integrace pro Home Assistant. Načítá

@@ -11,6 +11,8 @@
   <img src="https://raw.githubusercontent.com/79thales/vschrudim-watermeter/main/custom_components/vschrudim_watermeter/brand/icon.png" alt="VSChrudim Watermeter" width="180">
 </p>
 
+HACS displays documentation for the installed version. The unified header is included from v0.4.24. Update this repository in HACS to see it; refreshing the page or updating only the default branch does not change an older release's README.
+
 ## English overview
 
 VSChrudim Watermeter is an independent Home Assistant custom integration for

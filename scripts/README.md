@@ -16,6 +16,12 @@ python scripts/build_release.py --ref HEAD
 
 ## Preparing a new release
 
+HACS reads documentation from the installed release tag. README changes that
+must appear in HACS therefore need a new patch release, even if no functional
+code changed. Commit the README before creating the new tag; do not move older
+tags or overwrite their assets. Release CI checks the shared README header in
+the tagged checkout.
+
 1. Update `manifest.json` and add a matching version section to `CHANGELOG.md`,
    preserving both `### Čeština` and `### English`. Commit the changes and pass
    the **Validate** workflow, including HACS and Hassfest.
