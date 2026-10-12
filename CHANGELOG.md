@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.25 – 2026-10-12
+
+### Čeština
+
+- Licence projektu změněna z MIT na GNU GPL v3.0 (GPL-3.0-only). Dříve vydané verze zůstávají dostupné pod licencí, pod kterou byly původně zveřejněny.
+- Plný text licence a oznámení jsou také součástí instalačního ZIPu HACS.
+
+### English
+
+- Changed project license from MIT to GNU GPL v3.0 (GPL-3.0-only). Previously released versions remain available under the license under which they were originally published.
+- The full license text and notices are also included in the HACS installer ZIP.
+
 ## 0.4.24 – 2026-10-07
 
 ### Čeština

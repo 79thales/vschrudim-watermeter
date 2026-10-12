@@ -302,3 +302,13 @@ Brand icons are shipped inside `custom_components/vschrudim_watermeter/brand/`, 
 ## Disclaimer
 
 This integration is independent and is not an official product of, or supported by, Vodárenská společnost Chrudim. The web interface used by it is not publicly guaranteed and may change without notice.
+
+## License
+
+[![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](LICENSE)
+
+This project is licensed under the GNU General Public License v3.0, version 3 only (**GPL-3.0-only**). See [LICENSE](LICENSE) for details.
+
+Copyright (c) 2026 Jiří Dvořák (79thales).
+
+Previously released MIT versions retain their original license. This change applies to this and subsequent releases.

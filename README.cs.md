@@ -302,3 +302,13 @@ Brand ikony jsou součástí `custom_components/vschrudim_watermeter/brand/`, co
 ## Prohlášení
 
 Integrace je nezávislá a není oficiálním produktem ani podporovanou službou Vodárenské společnosti Chrudim. Používané webové rozhraní není veřejně garantováno a může se bez upozornění změnit.
+
+## Licence
+
+[![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](LICENSE)
+
+Tento projekt je licencován pod GNU General Public License v3.0, pouze verze 3 (**GPL-3.0-only**). Podrobnosti jsou v [LICENSE](LICENSE).
+
+Copyright (c) 2026 Jiří Dvořák (79thales).
+
+Dříve zveřejněné verze pod MIT zůstávají pod původní licencí. Změna platí pro toto a následující vydání.
