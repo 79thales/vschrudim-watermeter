@@ -36,7 +36,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def __init__(self) -> None:
         self._credentials: dict[str, str] = {}
         self._places = []
-        self._reauth_entry = None
 
     async def _validate(self, user_input: Mapping[str, str]) -> None:
         session = async_create_clientsession(
@@ -56,12 +55,24 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             session.detach()
 
     async def async_step_user(self, user_input: Mapping[str, str] | None = None):
+        """Ověřit přihlášení; chyby ponechají formulář otevřený bez zápisu dat."""
         errors = {}
         if user_input:
             try:
                 await self._validate(user_input)
                 if not self._places:
                     errors["base"] = "no_places"
+                elif self.source == config_entries.SOURCE_REAUTH and not any(
+                    place.identifier
+                    == (
+                        self._get_reauth_entry().data[CONF_PLACE]["evidence_number"]
+                        or self._get_reauth_entry().data[CONF_PLACE]["technical_number"]
+                    )
+                    for place in self._places
+                ):
+                    # Chybějící původní místo není oprávnění přepnout konfiguraci
+                    # na jiné. Uživatel může zkusit správné přihlášení znovu.
+                    errors["base"] = "reauth_place_not_found"
                 else:
                     return await self.async_step_place()
             except VsChrudimAuthError:
@@ -73,22 +84,39 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(step_id="user", data_schema=vol.Schema({vol.Required(CONF_USERNAME): str, vol.Required(CONF_PASSWORD): str}), errors=errors)
 
     async def async_step_place(self, user_input: Mapping[str, str] | None = None):
+        """Vytvořit nové místo, nebo obnovit přihlášení ke stejné identitě.
+
+        Identita zůstává tvořena normalizovaným uživatelem a ID místa.
+        Reauth aktualizuje pouze záznam z kontextu toku; kontrola duplicity
+        patří až do větve nové instalace. Helper naplánuje reload a ukončí
+        tok, zatímco options, název a identifikátory ponechá beze změny.
+        """
         choices = {place.identifier: place.address or place.technical_number for place in self._places}
         if user_input:
             selected = next(place for place in self._places if place.identifier == user_input[CONF_PLACE])
             unique_id = f"{self._credentials[CONF_USERNAME].casefold()}_{selected.identifier}"
             await self.async_set_unique_id(unique_id)
-            self._abort_if_unique_id_configured()
             data = {**self._credentials, CONF_PLACE: asdict(selected)}
-            if self._reauth_entry:
-                self.hass.config_entries.async_update_entry(self._reauth_entry, data=data)
-                await self.hass.config_entries.async_reload(self._reauth_entry.entry_id)
-                return self.async_abort(reason="reauth_successful")
+            if self.source == config_entries.SOURCE_REAUTH:
+                self._abort_if_unique_id_mismatch()
+                # Parametr data nahrazuje celý slovník. Zachováme proto i
+                # nesouvisející klíče starších či budoucích konfigurací.
+                data = {**self._get_reauth_entry().data, **data}
+                return self.async_update_reload_and_abort(
+                    self._get_reauth_entry(), data=data
+                )
+            self._abort_if_unique_id_configured()
             return self.async_create_entry(title=choices[selected.identifier], data=data, options={CONF_PRICE_PER_M3: DEFAULT_PRICE_PER_M3})
         return self.async_show_form(step_id="place", data_schema=vol.Schema({vol.Required(CONF_PLACE): vol.In(choices)}))
 
     async def async_step_reauth(self, entry_data: Mapping[str, str]):
-        self._reauth_entry = self._get_reauth_entry()
+        """Zahájit nový tok nad uloženým záznamem, také po restartu HA.
+
+        Cílový záznam určuje entry_id v kontextu HA, nikoli shoda účtu ani
+        odkaz uchovaný ve staré instanci toku. entry_data obsahuje původní
+        údaje; nové heslo musí uživatel znovu zadat a nechat ověřit.
+        """
+        self._get_reauth_entry()
         return await self.async_step_user()
 
     async def async_step_reconfigure(self, user_input: Mapping[str, str] | None = None):

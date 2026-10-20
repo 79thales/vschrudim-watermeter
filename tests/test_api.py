@@ -7,12 +7,15 @@ import types
 import unittest
 from unittest.mock import patch
 
-# Parser tests do not make HTTP calls; provide the minimal runtime module when
-# executing outside Home Assistant's dependency environment.
-aiohttp = types.ModuleType("aiohttp")
-aiohttp.ClientSession = object
-aiohttp.ClientError = OSError
-sys.modules.setdefault("aiohttp", aiohttp)
+# Parserové testy nevolají HTTP. Nouzový modul použijeme pouze bez instalace
+# aiohttp; jinak by zastínil skutečnou knihovnu při běhu celé sady s HA.
+try:
+    import aiohttp
+except ModuleNotFoundError:
+    aiohttp = types.ModuleType("aiohttp")
+    aiohttp.ClientSession = object
+    aiohttp.ClientError = OSError
+    sys.modules.setdefault("aiohttp", aiohttp)
 
 PACKAGE = "vschrudim_watermeter"
 root = Path(__file__).parents[1] / "custom_components" / PACKAGE

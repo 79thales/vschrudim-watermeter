@@ -27,10 +27,12 @@
       "invalid_auth": "Invalid credentials",
       "cannot_connect": "Cannot connect to the portal",
       "no_places": "No consumption places were found",
+      "reauth_place_not_found": "The original consumption place is not available for these credentials",
       "unknown": "Unexpected portal response"
     },
     "abort": {
       "already_configured": "This consumption place is already configured",
+      "unique_id_mismatch": "Credentials must belong to the same account and consumption place",
       "reauth_successful": "Reauthentication successful",
       "reconfigure_successful": "Settings updated"
     }

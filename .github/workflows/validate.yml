@@ -22,9 +22,12 @@ jobs:
       - name: Install exact latest stable HA from PyPI
         run: |
           requirement="$(python scripts/latest_ha_requirement.py)"
-          python -m pip install "$requirement"
+          # Přesný HA pin zabrání pluginu přejít na jinou verzi či betu HA.
+          python -m pip install "$requirement" pytest-homeassistant-custom-component
       - name: Run compatibility checks without skipping HA
-        run: python -m unittest tests.test_home_assistant_compatibility -v
+        run: python -m unittest discover -s tests -v
+      - name: Test real config flows and registry preservation on latest stable HA
+        run: python -m pytest -q tests_homeassistant
 
   tests:
     runs-on: ubuntu-latest
@@ -40,16 +43,26 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        home-assistant-version:
-          - "2026.8.0"
-          - "2026.9.0"
+        # Plugin HA má přesnou závislost na core; každá dvojice je ověřená.
+        include:
+          - home-assistant-version: "2026.8.0"
+            test-plugin-version: "0.13.354"
+          - home-assistant-version: "2026.9.0"
+            test-plugin-version: "0.13.363"
+          - home-assistant-version: "2026.10.2"
+            test-plugin-version: "0.13.373"
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
           python-version: "3.14"
-      - run: pip install "homeassistant==${{ matrix.home-assistant-version }}"
-      - run: python -m unittest tests.test_home_assistant_compatibility -v
+      - run: >-
+          python -m pip install
+          "homeassistant==${{ matrix.home-assistant-version }}"
+          "pytest-homeassistant-custom-component==${{ matrix.test-plugin-version }}"
+      - run: python -m unittest discover -s tests -v
+      - name: Test real config flows and registry preservation
+        run: python -m pytest -q tests_homeassistant
   hassfest:
     runs-on: ubuntu-latest
     steps:

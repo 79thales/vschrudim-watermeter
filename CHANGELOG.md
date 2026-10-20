@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.26 – 2026-10-20
+
+### Čeština
+
+- Opravena reautentizace: nové platné heslo se uloží do původní konfigurace a Home Assistant integraci znovu načte místo chyby „již nastaveno“.
+- Obnovení přihlášení ověřuje stejný účet a odběrné místo. Zachovává nastavení, další uložené položky, identitu konfigurace i stávající entity; ostatní odběrná místa nemění.
+- Doplněny funkční testy instalace, chyb přihlášení a spojení, obnovy uložené konfigurace a zachování registrů při reloadu. CI je spouští na HA 2026.8.0, 2026.9.0, 2026.10.2 a nejnovější stabilní verzi.
+
+### English
+
+- Fixed reauthentication: valid replacement credentials update the existing config entry and reload the integration instead of aborting as already configured.
+- Reauthentication verifies the same account and consumption place, preserving options, unrelated stored fields, config-entry identity and existing entities without changing other consumption places.
+- Added functional tests for installation, authentication and connection errors, restored config entries and registry preservation during reload. CI runs them on HA 2026.8.0, 2026.9.0, 2026.10.2 and the latest stable release.
+
 ## 0.4.25 – 2026-10-12
 
 ### Čeština

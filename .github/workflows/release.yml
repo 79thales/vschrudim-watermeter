@@ -22,7 +22,29 @@ env:
   RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
+  test-reauth:
+    # Draft smí vzniknout až po skutečném testu toku a reloadu v aktuálním HA.
+    # Oddělené prostředí zachovává lehké unit testy a balení na Pythonu 3.13.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - name: Install latest stable HA and matching test plugin
+        run: |
+          requirement="$(python scripts/latest_ha_requirement.py)"
+          python -m pip install "$requirement" pytest-homeassistant-custom-component
+      - name: Test compatibility, reauthentication and registry preservation
+        run: |
+          python -m unittest discover -s tests -v
+          python -m pytest -q tests_homeassistant
+
   build:
+    needs: test-reauth
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

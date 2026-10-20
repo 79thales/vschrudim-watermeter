@@ -27,10 +27,12 @@
       "invalid_auth": "Neplatné přihlašovací údaje",
       "cannot_connect": "Nelze se připojit k portálu",
       "no_places": "Nebylo nalezeno žádné odběrné místo",
+      "reauth_place_not_found": "Původní odběrné místo není pro toto přihlášení dostupné",
       "unknown": "Neočekávaná odpověď portálu"
     },
     "abort": {
       "already_configured": "Toto odběrné místo již je nastaveno",
+      "unique_id_mismatch": "Přihlášení musí patřit ke stejnému účtu a odběrnému místu",
       "reauth_successful": "Opětovné přihlášení bylo úspěšné",
       "reconfigure_successful": "Nastavení bylo aktualizováno"
     }
