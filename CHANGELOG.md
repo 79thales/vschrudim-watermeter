@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.27 – 2026-10-24
+
+### Čeština
+
+- Opravena volba testovacích závislostí: CI nejprve testuje přesně nejnovější stabilní Home Assistant a poté přijme pouze testovací plugin s přesnou závislostí na stejné verzi HA.
+- Zabráněno tichému návratu pipu na historický plugin 0.2.1, který způsoboval chyby importu integrace. Při chybějícím odpovídajícím pluginu nyní validace i příprava vydání uvádějí konkrétní příčinu a zůstávají neúspěšné.
+- Doplněny regresní testy výběru závislostí a dokumentace CI.
+- Omezení ověření při vydání: nejnovější HA je 2026.10.3, ale dostupný plugin 0.13.373 vyžaduje HA 2026.10.2. Úplné testy s fixture na HA 2026.10.3 proto zůstávají neověřené; toto vydání nedeklaruje úspěšnou úplnou validaci na této verzi.
+- Změna se týká CI a dokumentace; provozní logika integrace zůstává ve stavu verze 0.4.26.
+
+### English
+
+- Fixed test dependency selection: CI first tests the exact latest stable Home Assistant and then accepts only a test plugin that pins the same HA version.
+- Prevented pip from silently falling back to the obsolete 0.2.1 plugin, which caused integration import failures. Validation and release preparation now report the exact missing-plugin cause and remain unsuccessful.
+- Added dependency-selection regression tests and CI documentation.
+- Verification limitation at release: the latest HA is 2026.10.3, while the available plugin 0.13.373 requires HA 2026.10.2. Full fixture tests on HA 2026.10.3 remain unverified; this release does not claim successful full validation on that version.
+- This change affects CI and documentation; integration runtime logic remains as in version 0.4.26.
+
 ## 0.4.26 – 2026-10-20
 
 ### Čeština

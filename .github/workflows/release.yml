@@ -34,14 +34,21 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.14"
-      - name: Install latest stable HA and matching test plugin
+      - name: Install exact latest stable HA
         run: |
           requirement="$(python scripts/latest_ha_requirement.py)"
-          python -m pip install "$requirement" pytest-homeassistant-custom-component
-      - name: Test compatibility, reauthentication and registry preservation
+          echo "HA_REQUIREMENT=$requirement" >> "$GITHUB_ENV"
+          python -m pip install "$requirement"
+      - name: Test compatibility with latest stable HA
+        run: python -m unittest discover -s tests -v
+      - name: Install test plugin only for the exact tested HA
         run: |
-          python -m unittest discover -s tests -v
-          python -m pytest -q tests_homeassistant
+          # Bez odpovídajících fixture nesmí kontrola projít ani vytvořit draft.
+          plugin_requirement="$(python scripts/latest_ha_requirement.py --test-plugin-for "$HA_REQUIREMENT")"
+          python -m pip install "$HA_REQUIREMENT" "$plugin_requirement"
+          python -m pip check
+      - name: Test reauthentication and registry preservation
+        run: python -m pytest -q tests_homeassistant
 
   build:
     needs: test-reauth

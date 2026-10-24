@@ -47,3 +47,28 @@ dashboard samples or other attachments do not inflate the installer count. The
 latest-release badge and HACS's download indicator cover one release; the total
 badge combines installer downloads across releases. Neither metric identifies
 unique users or active installations, and no integration telemetry is involved.
+
+## Ověření aktuální stabilní verze Home Assistantu
+
+Validace i příprava vydání nejprve pomocí latest_ha_requirement.py určí
+přesný pin aktuálního stabilního HA z PyPI, nainstalují pouze tento core a
+spustí unittest. Stejný pin uloží do HA_REQUIREMENT pro následující kroky;
+nové vydání HA během běhu tedy nezmění testovanou verzi.
+
+Potom příkaz python scripts/latest_ha_requirement.py --test-plugin-for "$HA_REQUIREMENT"
+ověří, že aktuální stabilní pytest-homeassistant-custom-component z PyPI
+deklaruje přesnou, nepodmíněnou závislost na testovaném HA. Teprve pak
+workflow instaluje oba přesné piny, provede pip check a spustí skutečné
+testy konfigurace a zachování registrů pomocí pytest.
+
+Pokud odpovídající plugin ještě nebyl vydán, kontrola skončí jasnou chybou
+a úplná kompatibilita zůstává neověřená. CI nesmí přejít na starší HA, betu
+ani historický plugin bez přesné závislosti. Stejná chyba blokuje vytvoření
+draftu vydání; po zveřejnění odpovídajícího pluginu lze běh zopakovat.
+Síťová chyba či vadná metadata mají rovněž nenulový návratový kód.
+Žádný krok se nepřipojuje k provoznímu Home Assistantu.
+
+Regresní testy resolveru běží bez sítě jako součást unittest discover.
+Pokrývají zejména situaci z 24. 10. 2026: HA 2026.10.3, aktuální plugin
+0.13.373 pro HA 2026.10.2 a nepřípustný fallback pipu na plugin 0.2.1
+s neomezenou závislostí homeassistant.

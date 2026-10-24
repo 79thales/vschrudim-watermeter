@@ -22,10 +22,17 @@ jobs:
       - name: Install exact latest stable HA from PyPI
         run: |
           requirement="$(python scripts/latest_ha_requirement.py)"
-          # Přesný HA pin zabrání pluginu přejít na jinou verzi či betu HA.
-          python -m pip install "$requirement" pytest-homeassistant-custom-component
+          # Nejprve ověříme aktuální core bez závislosti na vydání testovacího pluginu.
+          echo "HA_REQUIREMENT=$requirement" >> "$GITHUB_ENV"
+          python -m pip install "$requirement"
       - name: Run compatibility checks without skipping HA
         run: python -m unittest discover -s tests -v
+      - name: Install test plugin only for the exact tested HA
+        run: |
+          # Chybějící přesná shoda je chyba CI; pip nesmí zvolit historický plugin.
+          plugin_requirement="$(python scripts/latest_ha_requirement.py --test-plugin-for "$HA_REQUIREMENT")"
+          python -m pip install "$HA_REQUIREMENT" "$plugin_requirement"
+          python -m pip check
       - name: Test real config flows and registry preservation on latest stable HA
         run: python -m pytest -q tests_homeassistant
 
