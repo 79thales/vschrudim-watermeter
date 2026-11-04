@@ -35,7 +35,16 @@ importovaných statistik Energie.
 
 ## Instalace
 
-V HACS přidejte tento repozitář jako **Custom repository** typu **Integration**, integraci stáhněte a restartujte Home Assistant. Poté přejděte do **Nastavení → Zařízení a služby → Přidat integraci → VSChrudim watermeter**.
+1. V Home Assistantu otevřete **HACS**.
+2. Vyhledejte **VSChrudim watermeter**.
+3. Otevřete integraci a zvolte **Stáhnout**.
+4. Pokud je to vyžadováno, restartujte Home Assistant.
+5. Přejděte do **Nastavení → Zařízení a služby → Přidat integraci**.
+6. Vyberte **VSChrudim watermeter** a dokončete konfiguraci.
+
+Pokud se integrace ve vyhledávání HACS zatím nezobrazuje, můžete místo toho
+přidat `https://github.com/79thales/vschrudim-watermeter` jako **Custom repository**
+typu **Integration** a následně pokračovat stažením a konfigurací podle kroků výše.
 
 Při ruční instalaci zkopírujte složku `custom_components/vschrudim_watermeter` do `/config/custom_components/` a restartujte Home Assistant.
 

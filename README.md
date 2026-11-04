@@ -36,7 +36,16 @@ privacy-safe diagnostic history for troubleshooting portal delays or changes.
 
 ## Installation
 
-In HACS, add this repository as a **Custom repository** of type **Integration**, download it, and restart Home Assistant. Then go to **Settings → Devices & services → Add integration → VSChrudim watermeter**.
+1. Open **HACS** in Home Assistant.
+2. Search for **VSChrudim watermeter**.
+3. Open the integration and select **Download**.
+4. Restart Home Assistant if required.
+5. Go to **Settings → Devices & services → Add integration**.
+6. Select **VSChrudim watermeter** and complete the configuration.
+
+If the integration is not yet visible in your HACS search, you can instead add
+`https://github.com/79thales/vschrudim-watermeter` as a **Custom repository**
+of type **Integration**, then follow the download and configuration steps above.
 
 For a manual installation, copy `custom_components/vschrudim_watermeter` to `/config/custom_components/` and restart Home Assistant.
 
