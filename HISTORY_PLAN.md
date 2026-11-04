@@ -1,30 +1,30 @@
-# Hourly history backfill
+# Doplňování hodinové historie
 
-Status: implemented in version 0.4.0.
+Stav: implementováno ve verzi 0.4.0. Tento historický plán popisuje tehdejší řešení; aktuální stav uvádí [README](README.md).
 
-## Goal
+## Cíl
 
-Import at most three calendar years of confirmed hourly readings for each configured consumption place without overwhelming the VS Chrudim portal or corrupting Home Assistant statistics.
+Importovat nejvýše tři kalendářní roky potvrzených hodinových odečtů pro každé nastavené odběrné místo bez přetížení portálu VS Chrudim nebo poškození statistik Home Assistantu.
 
-## Execution
+## Průběh
 
-The worker starts after the first successful integration setup and resumes after a restart when a checkpoint exists.
+Úloha se spustí po prvním úspěšném nastavení integrace a po restartu naváže na uložený kontrolní bod.
 
-1. Scan backwards from today to three calendar years ago.
-2. Request at most 31 inclusive days at a time using the portal's verified `U` (custom range) filter, visible and hidden `GraphFilter1` dates, and `btnRenew` action.
-3. Require a CSV with the documented `MERIDLO;CAS;STAV` header and validate that every non-empty response overlaps the requested range. Reject a response that is merely a recent-data fallback.
-4. Import completed hours idempotently under the real meter sensor statistic ID. The absolute physical register is used for both statistic state and sum, so independently resumed ranges remain consistent.
-5. Persist only a non-sensitive checkpoint: next range end, scan start, progress counters, timestamps and a generic error. Do not persist readings, session cookies or credentials in the checkpoint.
-6. Serialize history and normal polling through one API lock, pause briefly between blocks, and retry each failed block with the configured retry count and delay. A later successful coordinator update resumes a failed scan.
+1. Procházet období zpětně od dneška do data před třemi kalendářními roky.
+2. Žádat nejvýše 31 dnů včetně krajních dat pomocí ověřeného filtru portálu `U` (vlastní období), viditelných i skrytých dat `GraphFilter1` a akce `btnRenew`.
+3. Vyžadovat CSV s hlavičkou `MERIDLO;CAS;STAV` a ověřit překryv každé neprázdné odpovědi s požadovaným obdobím. Odmítnout odpověď, která místo toho pouze vrací nedávná data.
+4. Dokončené hodiny idempotentně importovat pod ID statistiky skutečného senzoru vodoměru. Absolutní stav registru použít pro stav i součet statistiky, aby nezávisle obnovené intervaly zůstaly konzistentní.
+5. Ukládat pouze necitlivý kontrolní bod: konec dalšího intervalu, začátek průchodu, počítadla, časové údaje a obecnou chybu. Neukládat odečty, cookies relace ani přihlašovací údaje.
+6. Historii a běžné dotazy řadit za sebe pomocí jediného zámku API, mezi bloky krátce čekat a chybné bloky opakovat podle nastaveného počtu pokusů a prodlevy. Další úspěšná aktualizace koordinátoru obnoví neúspěšný průchod.
 
-## Energy dashboard contract
+## Tehdejší vazba na panel Energie
 
-`sensor.<place>_meter_state` remains the source sensor with `device_class: water`, `state_class: total_increasing`, and unit `m³`. History is imported as an internal Recorder statistic with this same entity ID. `sensor.<place>_total_water_cost` mirrors the cumulative register multiplied by the configured `CZK/m³` tariff, and matching hourly cost statistics are imported under its entity ID. This is necessary because Home Assistant's generated fixed/current-price cost sensor reacts only to future entity state changes and does not retroactively price imported history. Historic tariff changes are deliberately out of scope until a dated tariff source is available.
+`sensor.<place>_meter_state` zůstává zdrojovým senzorem s `device_class: water`, `state_class: total_increasing` a jednotkou `m³`. Historie se importuje jako interní statistika Recorderu se stejným ID entity. `sensor.<place>_total_water_cost` odpovídá kumulativnímu stavu vynásobenému cenou v `CZK/m³`; odpovídající hodinové nákladové statistiky se importují pod jeho ID. Generovaný nákladový senzor Home Assistantu pro pevnou či aktuální cenu reaguje pouze na budoucí změny stavu a zpětně importovanou historii neoceňuje. Historické změny tarifu nejsou zahrnuty, dokud není k dispozici datovaný zdroj tarifů.
 
-## Acceptance checks
+## Akceptační kontroly
 
-- A one-month dry run returns hourly values in the requested month.
-- A duplicate run creates no duplicate statistics.
-- A restart resumes from the persisted checkpoint.
-- A meter reset never contributes negative consumption.
-- Daylight-saving transitions retain every portal timestamp without inventing a missing hour.
+- Zkušební průchod za měsíc vrátí hodinové hodnoty pro požadovaný měsíc.
+- Opakovaný průchod nevytvoří duplicitní statistiky.
+- Po restartu průchod pokračuje z uloženého kontrolního bodu.
+- Reset vodoměru nikdy nevytvoří zápornou spotřebu.
+- Přechody letního času zachovají všechny časové údaje portálu bez vymyšlené chybějící hodiny.

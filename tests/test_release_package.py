@@ -145,6 +145,11 @@ class ReleasePackageTest(unittest.TestCase):
 
 
 class ReleaseNotesTest(unittest.TestCase):
+    def test_czech_only_release_is_accepted(self) -> None:
+        """Jednojazyčné vydání se sestaví bez anglického oddílu."""
+        changelog = "## 0.1.0\n\n### Čeština\n\n- Testovací vydání.\n"
+        self.assertIn("Testovací vydání.", extract_release_notes(changelog, "0.1.0"))
+
     def test_extracts_only_requested_bilingual_release(self) -> None:
         changelog = (
             "# Changelog\n\n## Unreleased\n\nFuture work\n\n"

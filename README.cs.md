@@ -31,7 +31,7 @@ importovaných statistik Energie.
 - Diagnostika zařízení, bezpečná tlačítka údržby, historie pokusů o stažení,
   obnova chybějících odečtů a standardní opětovné přihlášení Home Assistantu.
 
-[English documentation](README.md) · [Aktuální vydání](https://github.com/79thales/vschrudim-watermeter/releases/latest) · [Nahlásit problém](https://github.com/79thales/vschrudim-watermeter/issues)
+[Aktuální vydání](https://github.com/79thales/vschrudim-watermeter/releases/latest) · [Nahlásit problém](https://github.com/79thales/vschrudim-watermeter/issues)
 
 ## Instalace
 

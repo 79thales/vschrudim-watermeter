@@ -1,16 +1,12 @@
-# Changelog
+# Přehled změn
 
 ## 0.4.28 – 2026-11-04
 
 ### Čeština
 
 - Návody nyní doporučují instalaci vyhledáním integrace přímo v HACS; vlastní repozitář zůstává záložní možností.
-- Ruční instalace a pokyny k instalačnímu ZIPu zůstávají zachovány. Funkční logika integrace se nemění.
-
-### English
-
-- Installation guides now recommend finding the integration directly in HACS; the custom repository remains available as a fallback.
-- Manual installation and installer ZIP instructions are preserved. Integration runtime behavior is unchanged.
+- Dokumentace včetně přehledu změn je česky. Příprava vydání podporuje české poznámky a zachovává čtení starších dvojjazyčných poznámek.
+- Ruční instalace a struktura instalačního ZIPu zůstávají zachovány. Funkční logika integrace se nemění.
 
 ## 0.4.27 – 2026-10-24
 
@@ -22,14 +18,6 @@
 - Omezení ověření při vydání: nejnovější HA je 2026.10.3, ale dostupný plugin 0.13.373 vyžaduje HA 2026.10.2. Úplné testy s fixture na HA 2026.10.3 proto zůstávají neověřené; toto vydání nedeklaruje úspěšnou úplnou validaci na této verzi.
 - Změna se týká CI a dokumentace; provozní logika integrace zůstává ve stavu verze 0.4.26.
 
-### English
-
-- Fixed test dependency selection: CI first tests the exact latest stable Home Assistant and then accepts only a test plugin that pins the same HA version.
-- Prevented pip from silently falling back to the obsolete 0.2.1 plugin, which caused integration import failures. Validation and release preparation now report the exact missing-plugin cause and remain unsuccessful.
-- Added dependency-selection regression tests and CI documentation.
-- Verification limitation at release: the latest HA is 2026.10.3, while the available plugin 0.13.373 requires HA 2026.10.2. Full fixture tests on HA 2026.10.3 remain unverified; this release does not claim successful full validation on that version.
-- This change affects CI and documentation; integration runtime logic remains as in version 0.4.26.
-
 ## 0.4.26 – 2026-10-20
 
 ### Čeština
@@ -38,23 +26,12 @@
 - Obnovení přihlášení ověřuje stejný účet a odběrné místo. Zachovává nastavení, další uložené položky, identitu konfigurace i stávající entity; ostatní odběrná místa nemění.
 - Doplněny funkční testy instalace, chyb přihlášení a spojení, obnovy uložené konfigurace a zachování registrů při reloadu. CI je spouští na HA 2026.8.0, 2026.9.0, 2026.10.2 a nejnovější stabilní verzi.
 
-### English
-
-- Fixed reauthentication: valid replacement credentials update the existing config entry and reload the integration instead of aborting as already configured.
-- Reauthentication verifies the same account and consumption place, preserving options, unrelated stored fields, config-entry identity and existing entities without changing other consumption places.
-- Added functional tests for installation, authentication and connection errors, restored config entries and registry preservation during reload. CI runs them on HA 2026.8.0, 2026.9.0, 2026.10.2 and the latest stable release.
-
 ## 0.4.25 – 2026-10-12
 
 ### Čeština
 
 - Licence projektu změněna z MIT na GNU GPL v3.0 (GPL-3.0-only). Dříve vydané verze zůstávají dostupné pod licencí, pod kterou byly původně zveřejněny.
 - Plný text licence a oznámení jsou také součástí instalačního ZIPu HACS.
-
-### English
-
-- Changed project license from MIT to GNU GPL v3.0 (GPL-3.0-only). Previously released versions remain available under the license under which they were originally published.
-- The full license text and notices are also included in the HACS installer ZIP.
 
 ## 0.4.24 – 2026-10-07
 
@@ -66,14 +43,6 @@
 - Regresní kontrola úplné hlavičky README v release CI a kontrola kompatibility s přesně zjištěnou nejnovější stabilní verzí Home Assistantu.
 - Bez změn funkční logiky, ID entit, nastavení nebo uložených dat. Staré tagy a ZIPy zůstávají zachované včetně počtů stažení.
 
-### English
-
-- The unified Home Assistant, HACS, Release, Downloads total, Downloads latest and Validation badges are now included in the release tag, not only the default branch.
-- Absolute logo URLs and a consistent 180 px width fix README rendering in HACS.
-- HACS displays documentation for the installed version. Update to this release to see the new header; refreshing the cache alone does not change an older release's README.
-- Added a release CI regression for the complete README header and a compatibility check against the exact latest stable Home Assistant version.
-- No changes to functional behavior, entity IDs, configuration or retained data. Existing tags and ZIP assets remain intact, preserving their download counts.
-
 ## 0.4.23 – 2026-10-07
 
 ### Čeština
@@ -83,300 +52,189 @@
 - Automatické balíčkování z přesného Git commitu nejdříve vytvoří koncept release s ověřeným ZIPem a českými i anglickými poznámkami. Zveřejněné přílohy nepřepisuje a nebalí místní přihlášení, odečty ani data Home Assistantu.
 - Bez změn načítání portálu, živých odečtů, statistik, obnovy historie, entit nebo uložených dat; bez nové telemetrie. Starší vydání si zachovávají původní způsob instalace.
 
-### English
-
-- A HACS installer asset, `vschrudim_watermeter.zip`, and total/latest-release installer download badges in both English and Czech READMEs. Counting starts with this version and includes downloads and updates, not unique users.
-- HACS's download indicator covers the selected release. Earlier downloads without an installer asset cannot be recovered; source-code archives, default-branch installations and meter exports are excluded from the badges.
-- The packaging workflow builds from the exact Git commit and first creates a draft with a verified installer and Czech/English release notes. It never overwrites published assets or packages local credentials, readings or Home Assistant data.
-- No changes to portal requests, live readings, statistics, history recovery, entities or retained data, and no added telemetry. Older releases retain their original installation method.
-
 ## 0.4.22 - 2026-09-11
 
-- Refresh maintenance-button availability after a history task actually
-  finishes, so `Retry history download` cannot remain visually disabled.
-- Allow Recorder up to 15.5 seconds of bounded backoff to expose newly queued
-  external statistics before classifying their verification as pending.
-- Pause an unverified history block without advancing its cursor, creating a
-  failure notification or changing live readings; a later successful update
-  safely retries the same idempotent block.
+- Obnovování dostupnosti tlačítek údržby po dokončení úlohy historie, aby `Retry history download` nezůstalo chybně neaktivní.
+- Omezené čekání až 15,5 sekundy na zpřístupnění nově zařazených externích statistik Recorderem před označením ověření za čekající.
+- Pozastavení neověřeného bloku historie bez posunu průchodu, oznámení chyby či změny živých odečtů; další úspěšná aktualizace bezpečně zopakuje stejný idempotentní blok.
 
 ## 0.4.21 - 2026-09-09
 
-- Refresh the diagnostic entities after every successful unchanged portal
-  poll. `Last update attempt` now shows the real polling time even while VS
-  Chrudim exposes the same latest reading; live meter values and Energy
-  statistics remain untouched.
+- Obnovení diagnostických entit i po úspěšném dotazu se stejným odečtem. `Last update attempt` ukazuje skutečný čas dotazu; živé hodnoty a statistiky Energie se nemění.
 
 ## 0.4.20 - 2026-09-08
 
-- Keep Energy-statistics health visible in the device diagnostics and its
-  read-only check, but do not create persistent notifications for pending,
-  incomplete, failed or recovered Energy statistics. Upgrading dismisses the
-  notification created by 0.4.19 after the next health publication.
+- Stav statistik Energie zůstává viditelný v diagnostice a kontrole pouze pro čtení, bez trvalých oznámení o čekajícím, neúplném, chybném či obnoveném stavu. Aktualizace po dalším zveřejnění stavu odstraní oznámení z 0.4.19.
 
 ## 0.4.19 - 2026-09-08
 
-- Add a read-only, persistent health check for the two integration-owned
-  external Energy statistics. It compares only completed portal-derived hourly
-  points with Recorder, reports safe coverage/count/gap/duplicate/monotonic
-  diagnostics, and never treats an old or unchanged portal timestamp as a
-  failure.
-- Add device diagnostics for **Energy statistics status** and **Meter register
-  status**, plus a non-destructive **Check Energy statistics** button. The
-  check performs no portal request, statistics write, history scan, clear or
-  rebuild.
-- Store only a bounded safe statistics checkpoint so an interrupted Recorder
-  write is retried idempotently after a later successful portal update. A
-  failed statistics write no longer advances the affected history-backfill
-  cursor or invalidates the live water-meter update.
-- Add transition-based Energy-statistics notifications and an informational
-  lower-register diagnostic. Neither changes the existing meter replacement
-  baseline or normal consumption calculation.
+- Trvalá kontrola dvou externích statistik Energie pouze pro čtení porovnává dokončené hodinové body s Recorderem a uvádí bezpečné údaje o pokrytí, počtech, mezerách, duplicitách a monotónnosti. Staré či nezměněné datum portálu nepovažuje za chybu.
+- Diagnostika **Energy statistics status** a **Meter register status** a bezpečné tlačítko **Check Energy statistics**. Kontrola nevyvolává dotaz na portál, zápis statistik, průchod historií ani smazání či přestavbu.
+- Omezený bezpečný kontrolní bod umožňuje po úspěšné aktualizaci idempotentně opakovat přerušený zápis; jeho selhání neposune doplňování historie ani nezneplatní živý odečet.
+- Oznámení při změně stavu statistik Energie a informační diagnostika nižšího stavu registru nemění výchozí stav při výměně vodoměru ani výpočet spotřeby.
 
 ## 0.4.18 - 2026-09-08
 
-- Keep portal transfers serialized, retain the single safe re-login replay for
-  an expired session, and use bounded exponential retry delays only for
-  consecutive failed automatic updates. Manual download tests remain
-  immediately available.
-- Isolate unexpected coordinator and Recorder write errors so a verified live
-  portal download is not discarded by auxiliary diagnostics or statistics
-  work.
-- Add privacy-safe parser feature profiles and non-blocking reading-quality
-  flags to the latest-download diagnostics and bounded download-attempt
-  history. They contain only a fixed vocabulary, never HTML, form values,
-  URLs, credentials or customer identifiers.
+- Přenosy portálu zůstávají sériové, expirovaná relace se jednou bezpečně obnoví a omezené exponenciální prodlevy se použijí jen po po sobě jdoucích chybách automatických aktualizací. Ruční test stažení zůstává ihned dostupný.
+- Neočekávané chyby koordinátoru a zápisu Recorderu jsou oddělené, aby pomocná diagnostika či statistiky nezahodily ověřený živý odečet.
+- Do diagnostiky a omezené historie pokusů přibyly bezpečné profily parseru a neblokující příznaky kvality odečtů. Používají pevný slovník bez HTML, údajů formulářů, URL, přihlašovacích údajů a identifikátorů zákazníka.
 
 ## 0.4.17 - 2026-09-08
 
-- Fix the 0.4.16 response-size guard so it reads every received HTTP chunk;
-  a split ASP.NET page could otherwise omit the consumption-place grid.
-- Recognize the VS Chrudim selected-consumption-place controls by their stable
-  ASP.NET `id` suffix (including rendered text) as well as their form `name`,
-  matching the verified desktop client behavior without weakening place
-  verification.
+- Oprava limitu velikosti odpovědi z 0.4.16, aby načetl všechny části HTTP odpovědi; jinak mohla dělená stránka ASP.NET přijít o seznam odběrných míst.
+- Rozpoznání výběru odběrného místa podle stabilní přípony ASP.NET `id` včetně vykresleného textu i podle `name` formuláře, ve shodě s ověřeným klientem a bez oslabení ověřování místa.
 
 ## 0.4.16 - 2026-09-08
 
-- Prevent historical backfill gaps from being reported as missing readings in
-  the portal's current download range.
-- Preserve notification transition state across a Home Assistant restart,
-  while treating its storage as best effort so it cannot block a normal update.
-- Bound each portal response to 12 MiB and each request to 45 seconds, and
-  checkpoint a running history backfill before integration unload.
-- Keep normal polling, historical reconciliation, live sensor history and
-  Energy-statistics behavior unchanged for valid portal responses.
+- Mezery v doplňované historii se nehlásí jako chybějící odečty v aktuálně stahovaném rozsahu portálu.
+- Stav přechodů oznámení se zachová po restartu Home Assistantu; případné selhání uložení neblokuje běžnou aktualizaci.
+- Omezení každé odpovědi na 12 MiB a požadavku na 45 sekund; před odebráním integrace se uloží průběh doplňování historie.
+- Při platných odpovědích se nemění pravidelné dotazy, sladění historie, historie živých senzorů ani statistiky Energie.
 
 ## 0.4.15 - 2026-09-08
 
-- Fix the Home Assistant compatibility regression test for the isolated
-  no-side-effect download check.
+- Oprava regresního testu kompatibility Home Assistantu pro oddělenou kontrolu stažení bez vedlejších účinků.
 
 ## 0.4.14 - 2026-09-08
 
-- Add a concise source-status diagnostic, gap diagnostics and per-download
-  data-quality counters, including the actual retrieval method and exact
-  successful-download time.
-- Add a device **Test download** button that verifies login and the current
-  download without starting history work or changing Energy statistics.
-- Make source and missing-reading notifications transition-based, while keeping
-  portal data age diagnostic-only unless the user explicitly enables a delay
-  status threshold.
+- Přidání stručného stavu zdroje, diagnostiky mezer a počítadel kvality včetně skutečné metody a času úspěšného stažení.
+- Tlačítko **Test download** ověří přihlášení a aktuální stažení bez spouštění historie či změn statistik Energie.
+- Oznámení zdroje a chybějících odečtů reagují na změny stavu; stáří dat je diagnostické, pokud uživatel výslovně nezapne práh zpoždění.
 
 ## 0.4.13 - 2026-09-08
 
-- Add an exact local timestamp diagnostic for the newest reading returned by
-  the VS Chrudim portal, alongside Home Assistant's relative timestamp view.
+- Přidání přesného místního času nejnovějšího odečtu portálu VS Chrudim vedle relativního zobrazení Home Assistantu.
 
 ## 0.4.12 - 2026-09-08
 
-- Automatically establish one fresh authenticated portal session and replay
-  the complete request when an existing session expires.
-- Preserve normal Home Assistant reauthentication for rejected credentials and
-  surface a second expired-session response instead of retrying indefinitely.
+- Po expiraci relace automaticky vytvořit novou přihlášenou relaci a jednou zopakovat úplný požadavek.
+- Při odmítnutí přihlašovacích údajů zachovat běžné obnovení přihlášení Home Assistantu; opakovanou expiraci oznámit bez nekonečných pokusů.
 
 ## 0.4.11 - 2026-09-08
 
-- Add a separate device button and action to immediately retry the portal
-  download and resume or restart the idempotent history reconciliation.
-- Keep the retry entirely separate from the destructive Energy-statistics
-  rebuild; it never clears statistics or the live sensor history.
-- Deduplicate repeated portal readings by timestamp before creating the single
-  external statistic for each hour.
+- Samostatné tlačítko a akce okamžitě zopakují stažení a obnoví nebo znovu spustí idempotentní sladění historie.
+- Opakování je oddělené od přestavby statistik Energie a nemaže statistiky ani historii živého senzoru.
+- Před vytvořením jedné externí statistiky za hodinu se odečty sjednotí podle času.
 
 ## 0.4.10 - 2026-09-08
 
-- Reuse the portal's already selected reporting context when the consumption-
-  place grid is temporarily absent, but only after verifying that its hidden
-  identifiers match the configured place.
-- Classify an unverified missing place list separately instead of reporting
-  the misleading low-level grid-parser error.
-- Add regression coverage for the verified reporting fallback and prevention
-  of cross-place data reuse.
+- Pokud dočasně chybí seznam odběrných míst, využít již zvolený kontext portálu pouze po ověření shody skrytých identifikátorů s nastaveným místem.
+- Neověřený chybějící seznam klasifikovat samostatně místo zavádějící chyby parseru tabulky.
+- Regresní testy ověřené záložní cesty a ochrany před použitím dat jiného místa.
 
 ## 0.4.9 - 2026-09-08
 
-- Fix the Energy-statistics rebuild failure caused by an unsupported cost
-  verification argument.
-- Treat a lower register value as a new meter baseline instead of attributing
-  the complete replacement-meter state to one hour of consumption.
-- Serialize clear and rebuild maintenance operations to prevent concurrent
-  destructive Recorder changes.
-- Add a configuration-category device button for explicitly rebuilding Energy
-  statistics after the complete source preflight.
-- Add regression coverage for rebuild verification, meter replacement and the
-  new maintenance button.
+- Oprava chyby přestavby statistik Energie způsobené nepodporovaným argumentem ověření nákladů.
+- Nižší stav registru se považuje za nový základ vodoměru, nikoli za hodinovou spotřebu rovnající se celému stavu náhradního přístroje.
+- Mazání a přestavba se provádějí sériově, aby nemohly souběžně měnit Recorder.
+- Konfigurační tlačítko spouští výslovnou přestavbu statistik Energie po úplném předběžném ověření zdroje.
+- Regresní testy ověření přestavby, výměny vodoměru a tlačítka.
 
 ## 0.4.8 - 2026-09-07
 
-- Support verified ASP.NET WebForms `__doPostBack` export LinkButtons while
-  preserving the complete successful form payload.
-- Improve the rendered measured-state table fallback for nested and wrapped
-  ASP.NET markup when no usable export action is available.
-- Treat a valid portal response with an unchanged newest reading as a
-  successful update; source-data age remains diagnostic information only.
-- Persist a bounded, privacy-safe history of recent download attempts in
-  diagnostics, including retrieval method, duration and sanitized errors.
-- Move Energy water consumption and cost to the integration-owned external
-  statistics writer, preventing duplicate `sensor.*` sums from distorting day
-  and month totals.
-- Add explicitly confirmed services to clear or preflight-validate and rebuild
-  only VSChrudim Energy statistics.
+- Podpora ověřených exportních odkazů ASP.NET WebForms `__doPostBack` při zachování všech úspěšných polí formuláře.
+- Lepší záložní čtení vnořených a zabalených tabulek odečtů ASP.NET při nedostupném exportu.
+- Platná odpověď se stejným nejnovějším odečtem je úspěšná; stáří dat zůstává diagnostickým údajem.
+- Ukládání omezené a soukromí chránící historie pokusů o stažení včetně metody, doby a očištěných chyb.
+- Spotřebu a náklady Energie zapisuje externí zapisovač integrace, čímž brání zkreslení denních a měsíčních součtů duplicitními `sensor.*` statistikami.
+- Výslovně potvrzované služby pro vymazání nebo předběžně ověřenou obnovu pouze statistik Energie VSChrudim.
 
 ## 0.4.7 - 2026-09-07
 
-- Treat a filtered range without an export action as the beginning of the
-  portal's available history only when newer hourly readings have already
-  established that boundary.
-- Complete the resumable backfill at that boundary instead of repeatedly
-  reporting an error for dates before the first available smart-meter reading.
-- Dismiss a stale incomplete-history notification as soon as a saved backfill
-  resumes.
+- Filtrovaný rozsah bez exportu označit jako začátek dostupné historie pouze tehdy, pokud hranici již stanovily novější hodinové odečty.
+- Na hranici dokončit obnovitelný průchod místo opakovaných chyb pro data před prvním dostupným odečtem.
+- Při obnovení uloženého průchodu odstranit zastaralé oznámení o neúplné historii.
 
 ## 0.4.6 - 2026-09-07
 
-- Submit the complete measured-state filter form when changing to a custom
-  period and when applying its dates, matching the working WebDownloader
-  browser flow.
-- Preserve all successful portal input controls required to render the
-  filtered hourly result and its export action.
-- Add regression coverage for complete custom-period WebForms payloads.
+- Při volbě vlastního období a použití jeho dat odesílat celý filtr měřených stavů podle ověřeného postupu WebDownloaderu.
+- Zachovat všechna úspěšná vstupní pole potřebná pro vykreslení hodinových výsledků a exportu.
+- Přidat regresní testy úplných formulářů WebForms pro vlastní období.
 
 ## 0.4.5 - 2026-09-07
 
-- Fix integration setup by importing the configured-price constants used by
-  the history cost backfill coordinator.
-- Add a Home Assistant compatibility regression check for the coordinator's
-  price configuration dependencies.
+- Oprava nastavení integrace importem konstant ceny používaných koordinátorem historických nákladů.
+- Regresní kontrola závislostí nastavení ceny v Home Assistantu.
 
 ## 0.4.4 - 2026-09-07
 
-- Fall back to the rendered measured-state table when the portal omits its CSV
-  link and WebForms export control.
-- Port the table-selection, Czech date and meter-state parsing approach from
-  WebDownloader while keeping customer values out of logs and diagnostics.
-- Keep the last successful meter readings available during transient update
-  failures, keep the locally configured water price independent of the portal,
-  and leave diagnostic entities available to explain the failure.
-- Add a cumulative total-water-cost entity and import matching hourly cost
-  statistics, because Home Assistant does not retroactively price backfilled
-  volume statistics.
-- Add regression coverage for direct HTML-table readings and API fallback.
+- Při chybějícím odkazu CSV a exportu WebForms použít vykreslenou tabulku odečtů.
+- Převzít výběr tabulky a parsování českých dat a stavu vodoměru z WebDownloaderu bez uvádění zákaznických hodnot v logu a diagnostice.
+- Při přechodných chybách zachovat poslední úspěšné odečty a diagnostiku; místní cena zůstává nezávislá na portálu.
+- Přidat kumulativní náklady a odpovídající hodinové statistiky, protože Home Assistant zpětně neoceňuje doplněné objemy.
+- Regresně ověřit přímé čtení HTML tabulky a záložní postup API.
 
 ## 0.4.3 - 2026-09-07
 
-- Validate export responses with the same CSV-column normalization used by the
-  parser, including quoted, BOM-prefixed and Czech accented headers.
-- Distinguish a missing export control from an export response with invalid
-  content without logging response data or customer values.
-- Add regression coverage for the accepted header variants and both failure
-  categories.
+- Ověřovat export stejnou normalizací sloupců CSV jako parser, včetně uvozovek, BOM a české diakritiky.
+- Rozlišovat chybějící exportní prvek a neplatný obsah odpovědi bez zaznamenávání obsahu a zákaznických hodnot.
+- Regresní testy variant hlavičky a obou kategorií chyb.
 
 ## 0.4.2 - 2026-09-07
 
-- Match the working WebDownloader export flow by supporting both direct export
-  links and WebForms export buttons.
-- Submit the complete current filter form, including its text fields, selected
-  values and ASP.NET state, when the portal exposes export as a button.
-- Preserve authentication and CSV-header validation for every candidate.
-- Add regression coverage for the WebForms export-button response.
+- Podpora přímých exportních odkazů i tlačítek WebForms podle funkčního postupu WebDownloaderu.
+- Při exportu tlačítkem odesílat úplný aktuální filtr včetně textových polí, vybraných hodnot a stavu ASP.NET.
+- Zachovat ověření přihlášení a hlavičky CSV u každého kandidáta.
+- Regresní test odpovědi exportního tlačítka WebForms.
 
 ## 0.4.1 - 2026-09-07
 
-- Recognize the portal's `DocumentShow.aspx` history export even when its link
-  text and URL do not contain the word `CSV`.
-- Continue to accept export responses only after verifying the expected
-  `MERIDLO;CAS;STAV` header.
-- Add regression coverage for accepted and invalid `DocumentShow.aspx`
-  responses.
+- Rozpoznat export historie `DocumentShow.aspx`, i když text odkazu ani URL neobsahují `CSV`.
+- Přijímat export až po ověření hlavičky `MERIDLO;CAS;STAV`.
+- Regresní testy platných i neplatných odpovědí `DocumentShow.aspx`.
 
 ## 0.4.0 - 2026-09-07
 
-- Change the default polling interval to one hour while preserving explicitly
-  configured intervals.
-- Import completed cumulative readings under the real `Meter state` entity
-  statistic so it is immediately selectable as water consumption in Energy.
-- Preserve entity-based `CZK/m³` price support in the Energy water settings.
-- Add an automatic, resumable three-year history scan in verified 31-day HTTP
-  ranges while retaining every portal record as a separate hourly statistic.
-- Persist only backfill progress and counters; readings remain in Recorder.
-- Add diagnostic sensors for newest available data, latest update attempt and
-  history-backfill progress/errors.
-- Notify when a history scan exhausts its retries and dismiss the notification
-  after a successful resumed scan.
-- Remove consumption-place identifiers and readings from shared diagnostics.
-- Add WebForms custom-range and internal-statistics regression coverage.
-- Document the current upstream HACS custom-repository icon limitation while
-  continuing to ship both inline brand icon resolutions.
+- Výchozí interval dotazů jedna hodina při zachování výslovně nastavených intervalů.
+- Import dokončených kumulativních odečtů do statistiky entity `Meter state`, kterou lze vybrat jako spotřebu vody v Energii.
+- Zachování podpory ceny z entity v `CZK/m³` v nastavení vody v Energii.
+- Automatický obnovitelný průchod tříletou historií po ověřených 31denních HTTP intervalech se samostatnou hodinovou statistikou pro každý záznam portálu.
+- Ukládání pouze postupu a počítadel; odečty zůstávají v Recorderu.
+- Diagnostické senzory nejnovějších dat, posledního pokusu a postupu či chyb doplňování historie.
+- Oznámení po vyčerpání pokusů o historii a jeho odstranění po úspěšném obnovení.
+- Odstranění identifikátorů odběrného místa a odečtů ze sdílené diagnostiky.
+- Regresní testy vlastního období WebForms a interních statistik.
+- Zdokumentování tehdejšího omezení ikon vlastních repozitářů HACS při zachování obou dodávaných rozlišení ikon.
 
 ## 0.3.4 - 2026-09-07
 
-- Open measured states through the portal's verified
-  `/Userdata/ProfileData.aspx` route after selecting a consumption place.
-- Validate the presence of the readings period filter before downloading data.
-- Support the actual `MainMenu1$btnProfileData` WebForms postback as a fallback,
-  including its empty event argument.
-- Add regression tests for direct and postback-based readings navigation.
+- Po výběru odběrného místa otevřít měřené stavy ověřenou cestou `/Userdata/ProfileData.aspx`.
+- Před stažením ověřit přítomnost filtru období odečtů.
+- Jako zálohu podporovat skutečný postback WebForms `MainMenu1$btnProfileData` včetně prázdného argumentu události.
+- Regresní testy přímé navigace i navigace postbackem.
 
 ## 0.3.3 - 2026-09-06
 
-- Give every config flow validation and configured account its own cookie jar.
-- Prevent a successful config-flow login from leaking its authenticated portal
-  state into the newly created runtime client, where the missing login form was
-  incorrectly treated as a protocol failure.
-- Isolate cookies between multiple VS Chrudim accounts and let Home Assistant
-  automatically clean up each config entry's HTTP session.
+- Každému ověření konfiguračního toku a účtu přiřadit vlastní úložiště cookies.
+- Zabránit přenosu přihlášené relace z konfiguračního toku do nového provozního klienta, kde chybějící přihlašovací formulář vedl k chybné protokolové chybě.
+- Oddělit cookies účtů VS Chrudim a nechat Home Assistant automaticky uklidit HTTP relaci konfigurační položky.
 
 ## 0.3.2 - 2026-09-06
 
-- Fix consumption-place discovery by excluding the portal grid's hidden cells,
-  matching the verified WebDownloader implementation.
-- Preserve the original capitalization of customer-visible place data.
-- Use the verified WebForms `Show$N` postback fallback when a row does not
-  expose its inline postback handler.
-- Add a regression fixture for the real grid structure with a hidden leading
-  cell.
+- Oprava vyhledávání odběrných míst vynecháním skrytých buněk tabulky podle ověřené implementace WebDownloaderu.
+- Zachování původních velkých a malých písmen v údajích místa zobrazených zákazníkovi.
+- Pokud řádek nemá vlastní obsluhu postbacku, použít ověřenou záložní cestu WebForms `Show$N`.
+- Regresní test skutečné struktury tabulky se skrytou úvodní buňkou.
 
 ## 0.3.1 - 2026-09-06
 
-- Fix ASP.NET login submission selecting the language image instead of the
-  portal's actual `btnLogin` submit control.
-- Add a regression test using the current public login-form structure.
+- Oprava odeslání přihlášení ASP.NET, které vybíralo obrázek jazyka místo skutečného tlačítka `btnLogin`.
+- Regresní test podle tehdejší veřejné struktury přihlašovacího formuláře.
 
 ## 0.3.0 - 2026-09-06
 
-- Add configurable persistent notifications after repeated source failures.
-- Add bounded repeated downloads to recover individual missing hourly readings.
-- Merge corrected portal values by timestamp and expose gap/retry diagnostics.
-- Add Home Assistant compatibility CI for 2026.8 and 2026.9.
+- Nastavitelná trvalá oznámení po opakovaných chybách zdroje.
+- Omezené opakování stahování pro doplnění jednotlivých chybějících hodinových odečtů.
+- Sloučení opravených hodnot portálu podle času a diagnostika mezer a opakování.
+- CI kompatibility s Home Assistantem 2026.8 a 2026.9.
 
 ## 0.2.0 - 2026-09-06
 
-- Add `Water price` sensor in CZK/m³ for Home Assistant Energy water costs.
-- Document and scope the three-year hourly-history backfill plan.
+- Senzor `Water price` v CZK/m³ pro náklady vody v Energii Home Assistantu.
+- Zdokumentování a vymezení plánu doplnění tříleté hodinové historie.
 
 ## 0.1.0 - 2026-09-06
 
-- Initial HACS-ready VSChrudim watermeter integration.
-- Config flow, reauthentication, coordinator and water-meter sensors.
-- Defensive ASP.NET WebForms/CSV client, diagnostics and parser/calculation tests.
+- První integrace VSChrudim watermeter připravená pro HACS.
+- Konfigurační tok, obnovení přihlášení, koordinátor a senzory vodoměru.
+- Odolný klient ASP.NET WebForms/CSV, diagnostika a testy parseru a výpočtů.

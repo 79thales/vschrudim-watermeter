@@ -1,11 +1,11 @@
-# HACS installation documentation policy
+# Pravidla instalační dokumentace HACS
 
-- Before official HACS default-repository approval, document installation through a HACS Custom repository.
-- After the HACS submission PR has been merged, make standard HACS search and installation the primary documented installation method.
-- Keep Custom repository installation as an optional fallback.
-- Keep manual installation instructions where applicable.
-- Update all supported README languages consistently.
-- Do not claim official HACS availability until the submission PR has actually been merged.
-- A merged submission alone does not prove the integration is visible in every user's HACS catalog.
-- Never modify unrelated integration behavior merely to update installation documentation.
-- Do not create releases or bump versions unless explicitly requested.
+- Před oficiálním schválením do výchozího repozitáře HACS dokumentuj instalaci přes vlastní repozitář HACS.
+- Po sloučení příslušného PR dokumentuj jako hlavní postup běžné vyhledání a instalaci v HACS.
+- Instalaci přes vlastní repozitář zachovej jako volitelnou záložní možnost.
+- Kde je to vhodné, zachovej návod k ruční instalaci.
+- Všechny podporované jazykové verze README aktualizuj souběžně a konzistentně.
+- Oficiální dostupnost v HACS neuváděj před skutečným sloučením příslušného PR.
+- Samotné sloučení PR nedokazuje, že se integrace již zobrazuje v katalogu HACS každého uživatele.
+- Při úpravě instalační dokumentace nikdy neměň nesouvisející chování integrace.
+- Bez výslovné žádosti nevytvářej vydání ani neměň číslo verze.
