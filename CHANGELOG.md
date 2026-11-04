@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.28 – 2026-11-04
+
+### Čeština
+
+- Návody nyní doporučují instalaci vyhledáním integrace přímo v HACS; vlastní repozitář zůstává záložní možností.
+- Ruční instalace a pokyny k instalačnímu ZIPu zůstávají zachovány. Funkční logika integrace se nemění.
+
+### English
+
+- Installation guides now recommend finding the integration directly in HACS; the custom repository remains available as a fallback.
+- Manual installation and installer ZIP instructions are preserved. Integration runtime behavior is unchanged.
+
 ## 0.4.27 – 2026-10-24
 
 ### Čeština
