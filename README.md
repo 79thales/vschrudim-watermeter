@@ -1,4 +1,4 @@
-# VSChrudim Watermeter for Home Assistant
+# VSChrudim Watermeter pro Home Assistant
 
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.8.0%2B-41BDF5?logo=home-assistant&logoColor=white&style=flat)](https://www.home-assistant.io/)
 [![HACS Integration](https://img.shields.io/badge/HACS-Integration-41BDF5?logo=home-assistant-community-store&logoColor=white&style=flat)](https://my.home-assistant.io/redirect/hacs_repository/?owner=79thales&repository=vschrudim-watermeter&category=integration)
@@ -11,304 +11,313 @@
   <img src="https://raw.githubusercontent.com/79thales/vschrudim-watermeter/main/custom_components/vschrudim_watermeter/brand/icon.png" alt="VSChrudim Watermeter" width="180">
 </p>
 
-HACS displays documentation for the installed version. The unified header is included from v0.4.24. Update this repository in HACS to see it; refreshing the page or updating only the default branch does not change an older release's README.
+HACS zobrazuje dokumentaci nainstalované verze. Jednotná hlavička je součástí vydání v0.4.24. Pro její zobrazení aktualizujte integraci v HACS; obnovení stránky ani změna pouze v hlavní větvi README staršího vydání nezmění.
 
-## English overview
+## Český přehled
 
-VSChrudim Watermeter is an independent Home Assistant custom integration for
-hourly remote water-meter readings from the authenticated VS Chrudim customer
-portal. It creates one device per selected consumption place, keeps the live
-meter state separate from imported Energy statistics, and retains a
-privacy-safe diagnostic history for troubleshooting portal delays or changes.
+VSChrudim Watermeter je nezávislá vlastní integrace pro Home Assistant. Načítá
+hodinové vzdálené odečty ze zákaznického portálu VS Chrudim, pro každé vybrané
+odběrné místo vytvoří jedno zařízení a odděluje živý stav vodoměru od
+importovaných statistik Energie.
 
-### Highlights
+### Hlavní funkce
 
-- Hourly cumulative meter readings, latest consumption, configurable water
-  price, and live total water-cost display.
-- A single integration-owned external-statistics writer for accurate Home
-  Assistant Energy consumption and historical cost charts.
-- Resumable three-year history reconciliation with CSV, verified ASP.NET
-  WebForms postback, and deterministic rendered-table fallbacks.
-- Device diagnostics, safe maintenance buttons, download-attempt history,
-  missing-reading recovery, and normal Home Assistant reauthentication.
+- Kumulativní hodinové odečty, poslední spotřeba, nastavitelná cena vody a
+  živý přehled celkového nákladu.
+- Jediný externí zapisovač statistik integrace pro správnou historickou
+  spotřebu a náklady v panelu Energie.
+- Obnovitelné až tříleté doplnění historie s CSV, ověřeným ASP.NET WebForms
+  postbackem a deterministickou záložní tabulkou.
+- Diagnostika zařízení, bezpečná tlačítka údržby, historie pokusů o stažení,
+  obnova chybějících odečtů a standardní opětovné přihlášení Home Assistantu.
 
-[Česká verze dokumentace](README.cs.md) · [Latest release](https://github.com/79thales/vschrudim-watermeter/releases/latest) · [Report an issue](https://github.com/79thales/vschrudim-watermeter/issues)
+[Aktuální vydání](https://github.com/79thales/vschrudim-watermeter/releases/latest) · [Nahlásit problém](https://github.com/79thales/vschrudim-watermeter/issues)
 
-## Installation
+## Instalace
 
-In HACS, add this repository as a **Custom repository** of type **Integration**, download it, and restart Home Assistant. Then go to **Settings → Devices & services → Add integration → VSChrudim watermeter**.
+1. V Home Assistantu otevřete **HACS**.
+2. Vyhledejte **VSChrudim watermeter**.
+3. Otevřete integraci a zvolte **Stáhnout**.
+4. Pokud je to vyžadováno, restartujte Home Assistant.
+5. Přejděte do **Nastavení → Zařízení a služby → Přidat integraci**.
+6. Vyberte **VSChrudim watermeter** a dokončete konfiguraci.
 
-For a manual installation, copy `custom_components/vschrudim_watermeter` to `/config/custom_components/` and restart Home Assistant.
+Pokud se integrace ve vyhledávání HACS zatím nezobrazuje, můžete místo toho
+přidat `https://github.com/79thales/vschrudim-watermeter` jako **Custom repository**
+typu **Integration** a následně pokračovat stažením a konfigurací podle kroků výše.
 
-From v0.4.23, HACS installs the `vschrudim_watermeter.zip` release asset. For manual installation from this ZIP, extract its contents directly into `custom_components/vschrudim_watermeter`, with `manifest.json` at that directory's root. GitHub's automatic **Source code (zip)** archive has a different layout. Older releases retain their original installation method.
+Při ruční instalaci zkopírujte složku `custom_components/vschrudim_watermeter` do `/config/custom_components/` a restartujte Home Assistant.
 
-### Installer downloads
+Od v0.4.23 HACS používá instalační přílohu `vschrudim_watermeter.zip`. Při ruční instalaci ji lze rozbalit přímo do `custom_components/vschrudim_watermeter`; `manifest.json` musí být přímo v této složce. Automatický GitHub archiv **Source code (zip)** má jinou strukturu. Starší vydání se nadále instalují původním způsobem.
 
-The badges count only installer downloads, including manual downloads and updates, not unique users or active installations. HACS's indicator covers the selected release; the total badge combines installer downloads across releases. Counting starts with v0.4.23. Earlier downloads, source-code archives, default-branch installations and water-meter exports are excluded. Cached counts may take time to refresh. No account details, meter readings or usage telemetry are sent by the integration for these counters. See [release packaging](scripts/README.md) for the maintainer workflow.
+### Počet stažení
 
-## Configuration
+Odznaky počítají pouze stažení instalačního ZIPu včetně opakovaných stažení a aktualizací, nikoli uživatele či aktivní instalace. Horní ikona v HACS patří vybranému vydání, odznak celkových stažení sčítá balíčky všech vydání. Počítání začíná v0.4.23; starší stažení, zdrojové archivy, výchozí větev ani exporty vodoměru se nezapočítávají. Cache může zobrazení zpozdit. Integrace kvůli tomu neposílá přihlašovací údaje, odečty ani telemetrii. Postup vydávání popisuje [dokumentace balíčkování](scripts/README.md).
 
-### Live readings and updates
+## Konfigurace
 
-Enter the portal username and password, then select a consumption place. The default update interval is one hour, matching the portal's hourly reading resolution; it can be changed in Reconfigure (minimum 15 minutes). An interval already saved by the user is preserved during upgrades.
+### Živé odečty a aktualizace
 
-The portal records a cumulative state hourly. `Meter state` is a live display
-sensor in m³. Completed portal hours are written by the integration's single
-external-statistics writer; this prevents the live sensor and the importer from
-creating competing Recorder sums. `Latest consumption` is the non-negative
-difference between the newest two states; it is not an instantaneous flow
-rate.
+Zadejte uživatelské jméno a heslo do portálu a vyberte odběrné místo. Výchozí interval aktualizace je jedna hodina, protože portál zaznamenává odečty po hodinách; lze ho změnit přes **Přenastavit** (minimálně 15 minut). Uložený uživatelský interval zůstává zachován i po aktualizaci integrace.
 
-Set the all-in water/sewerage price in **Reconfigure**. A value of `0` is intentionally the default until you enter your actual tariff. The integration exposes both `Water price` (`CZK/m³`) and `Total water cost` (`CZK`). Changing the integration price restarts the idempotent history scan so existing hourly cost statistics are recalculated with the new tariff.
+Portál poskytuje kumulativní stav vodoměru po hodinách. `Meter state` je živý
+zobrazovací senzor v m³. Dokončené hodiny z portálu zapisuje jediný externí
+zapisovač statistik integrace; živý senzor a import tak nevytvářejí dvě
+konkurenční součtové statistiky Recorderu. `Latest consumption` je nezáporný
+rozdíl mezi dvěma posledními stavy; nejedná se o okamžitý průtok.
 
-### Energy dashboard and historical costs
+Celkovou cenu vody a stočného nastavte přes **Přenastavit**. Výchozí hodnota `0` je záměrná, dokud nezadáte vlastní tarif. Integrace vytváří senzory `Water price` (`CZK/m³`) a `Total water cost` (`CZK`). Změna ceny spustí nový idempotentní průchod historií, aby se hodinové náklady přepočítaly podle aktuálního tarifu.
 
-Use the integration-owned statistics when configuring water in the Home
-Assistant Energy dashboard:
+### Panel Energie a historické náklady
 
-1. Open **Settings → Dashboards → Energy → Water** and add or edit the water
-   source.
-2. Select **Water consumption** from **VSChrudim watermeter** as **Water
-   consumption**. This is the external statistic ID
-   `vschrudim_watermeter:<entry_id>_water_consumption`, not `sensor.*`.
-   Recorder requires lowercase statistic IDs, so `<entry_id>` is normalized to
-   lowercase when Home Assistant uses an uppercase config-entry ID.
-3. Under cost tracking, choose **Use an entity tracking the total costs**.
-4. Select **Water cost** from **VSChrudim watermeter** as the total-cost
-   statistic. Its ID is `vschrudim_watermeter:<entry_id>_water_cost`.
+Pro zobrazení nákladů ze zpětně importované historie nastavte zdroj vody v
+panelu Energie takto:
 
-This selection is important for imported history. Home Assistant's **fixed
-price** and **current price entity** modes create a helper that starts at zero
-and calculates only future live changes. They do not retroactively price the
-hourly readings imported by this integration. The `Water cost` statistic
-contains matching hourly cost statistics, so both historical consumption and
-its cost are shown. For each interval, the displayed cost change is the
-meter-state change multiplied by the price configured in **Reconfigure**.
+1. Otevřete **Nastavení → Nástěnky → Energie → Voda** a přidejte nebo upravte zdroj vody.
+2. Jako **Spotřebu vody** zvolte `Water consumption` od **VSChrudim
+   watermeter**. Jde o externí statistiku s ID
+   `vschrudim_watermeter:<entry_id>_water_consumption`, nikoli `sensor.*`.
+   Recorder vyžaduje malé znaky, proto se `<entry_id>` převede na malá písmena,
+   pokud Home Assistant používá velké znaky ID konfigurační položky.
+3. V části nákladů vyberte **Použít entitu sledující celkové náklady**.
+4. Jako statistiku celkových nákladů zvolte `Water cost` od **VSChrudim
+   watermeter**. Její ID je `vschrudim_watermeter:<entry_id>_water_cost`.
 
-`Water price` is the current unit-price sensor and is not the cumulative cost
-statistic. `Total water cost` remains a convenient live display entity, but is
-not an Energy statistic source. If the dashboard already uses a legacy
-`Meter state`/`Total water cost` `sensor.*` source or fixed-price mode, use the
-one-time rebuild procedure below before switching both selections.
+Tato volba je pro importovanou historii důležitá. Režimy Home Assistantu
+**Použít fixní cenu** a **Použít entitu s aktuální cenou** vytvářejí pomocný
+senzor, který začne na nule a počítá pouze budoucí živé změny. Zpětně
+importované hodinové odečty neoceňují. Statistika `Water cost` naopak obsahuje
+odpovídající hodinové statistiky nákladů, proto se zobrazí jak historická
+spotřeba, tak její cena. Náklad za interval odpovídá změně stavu vodoměru
+vynásobené cenou nastavenou přes **Přenastavit**.
 
-### Correcting legacy Energy statistics
+`Water price` je senzor aktuální jednotkové ceny, nikoli kumulativní nákladová
+statistika. `Total water cost` zůstává praktickým živým zobrazovacím senzorem,
+ale není zdrojem statistik Energie. Pokud už panel používá starší zdroj
+`sensor.*` (`Meter state` nebo `Total water cost`) či pevnou cenu, proveďte
+nejdříve jednorázovou obnovu níže a teprve potom přepněte obě volby.
 
-Version 0.4.8 fixes a former double-writer design that could distort day and
-month totals. The upgrade does not delete any data automatically. After the
-new version has completed one successful update, run this service in
-**Developer Tools → Actions** with your integration's config-entry ID:
+### Oprava starších statistik Energie
+
+Verze 0.4.8 opravuje dřívější dvojí zápis statistik, který mohl zkreslit denní
+a měsíční součty. Aktualizace sama žádná data nemaže. Po první úspěšné
+aktualizaci nové verze spusťte v **Nástroje pro vývojáře → Akce** následující
+službu s ID své konfigurační položky:
 
 ```yaml
 action: vschrudim_watermeter.rebuild_energy_statistics
 data:
-  entry_id: "your-config-entry-id"
+  entry_id: "id-vasi-konfiguracni-polozky"
   confirm: true
 ```
 
-Starting with version 0.4.9, the same explicitly confirmed rebuild can also be
-started from the water-meter device page using **Rebuild Energy statistics**
-under **Configuration**. The button performs the safe source preflight and
-calls the confirmed rebuild. Direct statistics clearing remains service-only.
+Od verze 0.4.9 lze stejnou potvrzenou obnovu spustit také na stránce zařízení
+vodoměru tlačítkem **Obnovit statistiky Energie** v části **Konfigurace**.
+Tlačítko provede bezpečný předběžný download a volá obnovu s výslovným
+potvrzením. Samostatné mazání statistik zůstává dostupné pouze jako služba.
 
-The service first downloads and validates the complete available portal
-history. Only then does it clear the legacy `sensor.*` statistics and the
-integration-owned statistics, import a chronological replacement, verify its
-latest monotonic sum, and resume normal writes. If download or validation
-fails, it does not delete existing statistics. It never deletes the live
-sensor states or their ordinary Recorder history.
+Služba nejdříve stáhne a ověří celou dostupnou historii portálu. Teprve poté
+vymaže staré statistiky `sensor.*` a integrační statistiky, chronologicky
+naimportuje náhradu, ověří poslední monotónní součet a obnoví běžné zápisy.
+Pokud stažení nebo ověření selže, stávající statistiky nesmaže. Živé stavy
+senzorů ani jejich obyčejnou historii Recorderu nikdy nemaže.
 
-`vschrudim_watermeter.clear_energy_statistics` has the same `entry_id` and
-`confirm: true` requirement but only clears those Energy statistics and leaves
-the writer paused. Use it only when you intentionally want the Energy series
-empty before a later rebuild.
+`vschrudim_watermeter.clear_energy_statistics` vyžaduje stejné `entry_id` a
+`confirm: true`, ale pouze smaže uvedené statistiky Energie a ponechá zápis
+pozastavený. Použijte ji jen tehdy, když chcete řadu Energie záměrně vyprázdnit
+před pozdější obnovou.
 
-### Checking Energy statistics safely
+### Bezpečná kontrola statistik Energie
 
-Version 0.4.19 adds **Check Energy statistics** in the device's
-**Diagnostics** section. It is a read-only comparison of the already validated
-in-memory portal readings and the two integration-owned Recorder series. It
-does not contact VS Chrudim, write data, start a history scan, clear statistics
-or rebuild them.
+Verze 0.4.19 přidává do části **Diagnostika** zařízení tlačítko
+**Zkontrolovat statistiky Energie**. Jde o kontrolu pouze pro čtení: porovná
+už ověřené odečty v paměti integrace se dvěma integračními řadami Recorderu.
+Nevolá portál VS Chrudim, nic nezapisuje, nespouští doplňování historie a
+nemazá ani neobnovuje statistiky.
 
-`Energy statistics status` reports `never`, `ok`, `pending`, or `error`. Its
-attributes show the matching health state (`unknown`, `ok`, `pending`,
-`incomplete`, or `error`), safe coverage counts, earliest/latest statistic
-timestamps, internal UTC-hour gaps, duplicate timestamps, sum monotonicity and
-the saved backfill cursor. `Meter register status` is informational only: a
-lower value is reported as `possible_reset_or_correction` so it can be
-inspected without altering the established no-spike replacement-meter logic.
+Entita `Stav statistik Energie` používá stavy `never`, `ok`, `pending` a
+`error`. Její atributy ukazují stav kontroly (`unknown`, `ok`, `pending`,
+`incomplete` nebo `error`), bezpečné počty pokrytí, nejstarší/nejnovější
+časové značky statistik, vnitřní mezery v UTC hodinách, duplicity, monotónnost
+součtů a uložený kurzor doplňování. `Stav registru vodoměru` je pouze
+informační: nižší stav označí jako `possible_reset_or_correction`, aby jej bylo
+možné zkontrolovat bez změny osvědčeného výpočtu výměny vodoměru bez falešné
+špičky spotřeby.
 
-If Recorder cannot accept a normal statistics write, the verified live meter
-update remains successful. The integration persists only a small safe
-checkpoint and retries the same idempotent external statistics after a later
-successful portal update. A history-backfill block is not advanced until its
-statistics write is accepted. No automatic clear or rebuild is ever performed.
+Pokud Recorder běžný zápis statistik dočasně nepřijme, úspěšně ověřená živá
+aktualizace vodoměru zůstane úspěšná. Integrace uloží jen malý bezpečný stav a
+stejný idempotentní zápis zkusí po dalším úspěšném načtení portálu. Blok
+historie neposune, dokud zápis statistik nebyl přijat. Automaticky nikdy
+nesmaže ani neobnoví statistiky.
 
-## Sensors and device entities
+## Senzory a entity zařízení
 
-Each selected consumption place creates one **VSChrudim watermeter** device.
-The entity IDs are assigned by Home Assistant; use the displayed entity names
-when selecting them in dashboards or automations.
+Každé vybrané odběrné místo vytvoří jedno zařízení **VSChrudim watermeter**.
+ID entit přiřazuje Home Assistant; do nástěnek a automatizací vybírejte entity
+podle jejich zobrazených názvů.
 
-### Main sensors
+### Hlavní senzory
 
-- **Meter state** — current cumulative water-meter state in m³.
-- **Latest consumption** — non-negative difference between the newest two
-  portal states; it is not an instantaneous flow rate.
-- **Water price** — configured all-in price in `CZK/m³`.
-- **Total water cost** — current live cost display in `CZK`; it is not an
-  Energy Dashboard statistic source.
+- **Meter state** — aktuální kumulativní stav vodoměru v m³.
+- **Latest consumption** — nezáporný rozdíl mezi dvěma nejnovějšími stavy
+  portálu; nejde o okamžitý průtok.
+- **Water price** — nastavená celková cena v `CZK/m³`.
+- **Total water cost** — živý přehled nákladu v `CZK`; není zdrojem statistik
+  pro panel Energie.
 
-### Diagnostic sensors and buttons
+### Diagnostické senzory a tlačítka
 
-The device also exposes source status, portal-reading time, missing-reading and
-download-quality counters, the latest update attempt, backfill status,
-Energy-statistics status, and meter-register status. The **Test download**,
-**Retry history download**, and **Check Energy statistics** buttons are safe
-diagnostic actions. **Rebuild Energy statistics** is the explicitly confirmed
-maintenance action described below.
+Zařízení dále obsahuje stav zdroje, čas odečtu portálu, počitadla chybějících
+odečtů a kvality stažení, poslední pokus o aktualizaci, stav doplnění historie,
+stav statistik Energie a stav registru vodoměru. Tlačítka **Otestovat
+stažení**, **Zkusit doplnit data** a **Zkontrolovat statistiky Energie** jsou
+bezpečné diagnostické akce. **Obnovit statistiky Energie** je potvrzená údržba
+popsaná níže.
 
-## Diagnostics, history, and recovery
+## Diagnostika, historie a obnova
 
-After setup, the integration automatically scans up to three calendar years backwards in inclusive 31-day HTTP blocks. Every portal reading remains an individual hourly statistic; the blocks only reduce the number of requests and do not aggregate the data. The integration uses the same custom-date WebForms controls as WebDownloader, prefers the validated CSV response and falls back to the rendered measured-state table when the portal omits its export control. It validates that each non-empty result overlaps the requested range, imports only completed hours, and checkpoints progress after every block. An interrupted or failed scan resumes from its saved cursor; portal requests are serialized with normal polling and retried using the configured recovery settings.
+Po nastavení integrace automaticky prohledá až tři kalendářní roky zpět, včetně obou krajních dat, v 31denních blocích. Každý odečet zůstává samostatnou hodinovou statistikou; bloky pouze snižují počet požadavků na portál a data neagregují. Integrace používá stejná vlastní datumová pole ASP.NET WebForms jako WebDownloader, upřednostňuje ověřenou CSV odpověď a pokud portál nabídku exportu nezobrazí, načte vykreslenou tabulku naměřených stavů.
 
-Only progress dates and counters are stored in the integration's `.storage` record. Customer readings are written to Home Assistant's Recorder statistics and are not duplicated in the progress store.
+Každý neprázdný výsledek ověřuje podle překryvu s požadovaným obdobím, importuje pouze dokončené hodiny a po každém bloku uloží postup. Přerušené nebo chybné procházení pokračuje z uloženého bodu; požadavky portálu se řadí za běžné aktualizace a opakují se podle nastavení obnovy.
 
-Use **Retry history download** in the device's **Diagnostics** section to
-request an immediate portal update and then resume a saved backfill or start a
-new reconciliation of the available hourly history. It is not **Rebuild Energy
-statistics**: the retry does not delete any statistics or live-sensor history.
-Use **Test download** in the same section when you only want to verify the
-login and a current portal download. It neither starts a history backfill nor
-writes or changes Energy statistics.
-`Data available through` always reports the latest timestamp actually returned
-by VS Chrudim; the integration does not assume an allowed portal delay.
-Home Assistant renders that timestamp entity relatively. **Latest portal
-reading** therefore displays the same value as an exact local date and time.
+Do záznamu `.storage` integrace se ukládají pouze data postupu a počitadla. Odečty zákazníka se zapisují do Recorder statistik Home Assistantu a v záznamu postupu se neduplikují.
 
-Repeated portal responses are merged by timestamp, with a corrected value
-replacing the older value at that timestamp. The external-statistics builders
-also produce a single point per completed hour under the integration-owned
-statistic IDs, so retrying does not create a second statistic series.
+V části **Diagnostika** zařízení použijte tlačítko **Zkusit doplnit data**.
+Vyvolá okamžitou aktualizaci portálu a potom obnoví uložené doplňování nebo
+spustí nový idempotentní průchod dostupnou hodinovou historií. Nejde o tlačítko
+**Obnovit statistiky Energie**: pokus nemaže statistiky ani běžnou historii
+živých senzorů. `Data stažena do` vždy ukazuje nejnovější čas skutečně vrácený
+portálem VS Chrudim; integrace nepředpokládá žádnou maximální přípustnou prodlevu.
+Tlačítko **Otestovat stažení** ve stejné části pouze ověří přihlášení a aktuální
+stažení z portálu. Nespouští doplňování historie a nezapisuje ani nemění
+statistiky Energie.
+Home Assistant u této časové entity zobrazuje relativní stáří; samostatná
+entita `Poslední odečet na portálu` proto ukazuje přesné místní datum a čas.
 
-Diagnostic entities show:
+Opakované odpovědi portálu se spojují podle časové značky; opravená hodnota
+nahradí starší hodnotu stejného času. Zapisovače externích statistik navíc
+vytvoří pro každou dokončenou hodinu jediný bod pod integračními ID statistik,
+takže opakovaný pokus nevytvoří druhou statistickou řadu.
 
-- one source state: `ok`, `delayed_data`, `authentication_required`, or
-  `error`, with the exact last successful download time and method (CSV link,
-  WebForms postback/submit, or HTML table),
-- the relative age of the newest portal timestamp (`Data available through`)
-  and its exact local date and time (`Latest portal reading`),
-- the time and result of the latest update attempt (`Last update attempt`),
-- the number of currently missing hourly readings and their oldest timestamp,
-- data-quality counters for the most recent download: returned readings,
-  duplicate timestamps merged, and gaps recovered by retry downloads,
-- a privacy-safe profile of the recognized portal page structures and
-  informational reading-quality flags (for example a lower meter register),
-  which never reject an otherwise valid download,
-- three-year history progress, imported-hour count and the last backfill error (`History backfill status`).
+Diagnostické entity zobrazují:
 
-The Energy-statistics health snapshot and its saved retry state contain only
-timestamps, counts, fixed status values and sanitized error text. They do not
-store readings, CSV/HTML, requests, URLs, credentials, consumption-place data
-or meter identifiers. Energy-statistics health is intentionally shown only in
-the device diagnostics and downloaded diagnostics; it never creates a
-persistent notification.
+- jediný stav zdroje: `ok`, `delayed_data`, `authentication_required` nebo
+  `error`, včetně přesného času posledního úspěšného stažení a metody (odkaz
+  CSV, WebForms postback/submit nebo HTML tabulka),
+- relativní stáří nejnovější časové značky (`Data stažena do`) a její přesné
+  místní datum a čas (`Poslední odečet na portálu`),
+- čas a výsledek posledního pokusu o aktualizaci (`Last update attempt`),
+- počet aktuálně chybějících hodinových odečtů a čas nejstarší mezery,
+- počitadla kvality posledního stažení: počet vrácených odečtů, sloučené
+  duplicitní časové značky a mezery doplněné opakovaným stažením,
+- bezpečný profil rozpoznaných struktur stránky portálu a pouze informační
+  příznaky kvality odečtů (například pokles stavu vodoměru), které nikdy samy
+  neodmítnou jinak platné stažení,
+- postup tříletého doplnění historie, počet importovaných hodin a poslední chybu (`History backfill status`).
 
-`Mark portal data as delayed after` is optional and defaults to `0` (disabled).
-It only changes the source-state diagnostic and never treats old portal data as
-a failed update. Notifications are created only when authentication is needed,
-when gaps remain after the configured retries, or when either condition returns
-to normal; a delayed timestamp alone never creates a notification.
+Kontrola statistik Energie a její uložený stav opakování obsahují pouze časové
+značky, počty, pevné stavy a očištěný text chyby. Neukládají odečty, CSV/HTML,
+požadavky, URL, přihlašovací údaje, údaje o odběrném místě ani identifikátory
+vodoměru. Stav statistik Energie je záměrně viditelný pouze v diagnostice
+zařízení a ve stažené diagnostice; trvalé upozornění nevytváří.
 
-The downloaded diagnostics additionally include a newest-first rolling history
-of the last 30 normal download attempts. Each record contains only safe timing,
-result, retrieval-method, count and sanitized-error information. It survives a
-Home Assistant restart and contains no credentials, cookies, portal HTML, CSV
-content, consumption-place identifiers or request URLs.
+Volba **Označit data portálu jako zpožděná po** je nepovinná a výchozí hodnota
+`0` ji vypíná. Mění pouze diagnostický stav zdroje; starší data sama o sobě
+nejsou selháním aktualizace. Upozornění vzniká jen při nutnosti opětovného
+přihlášení, při přetrvávajících mezerách po nastavených pokusech a při návratu
+takového stavu do normálu. Samotné zpoždění dat upozornění nevytváří.
 
-## Availability notifications and missing readings
+Stažená diagnostika navíc obsahuje nejnovější-první průběžnou historii posledních
+30 běžných pokusů o stažení. Každý záznam obsahuje pouze bezpečný čas, výsledek,
+způsob získání, počet a očištěnou chybu. Historie přežije restart Home
+Assistantu a neobsahuje přihlašovací údaje, cookies, HTML portálu, CSV obsah,
+identifikátory odběrného místa ani URL požadavků.
 
-The integration uses Home Assistant persistent notifications only on state
-transitions. By default it reports the portal as unavailable after three
-consecutive failed updates, reports an authentication problem immediately, and
-creates one recovery notification after either problem returns to normal.
-Authentication errors use the standard reauthentication flow.
+## Upozornění na nedostupnost a chybějící odečty
 
-Every successful download is merged with readings already seen during the current runtime. Internal hourly gaps in the **current portal response range** trigger up to two repeated downloads with a configurable delay. Historical gaps discovered by the separate backfill are not reported as a current-download outage, because a normal portal request cannot repair them. Corrected portal values replace the older value with the same timestamp. If current-range gaps remain after those attempts, one persistent notification lists their count and a short timestamp preview; a recovery notification is created once the readings are filled. Czech spring DST's nonexistent 02:00 hour is not treated as missing. All thresholds, notifications, attempt counts and delays can be changed under **Reconfigure**.
+Integrace používá trvalá oznámení Home Assistantu pouze při změně stavu. Ve
+výchozím nastavení po třech po sobě jdoucích neúspěšných aktualizacích oznámí
+nedostupnost portálu, problém s přihlášením oznámí hned a po návratu kteréhokoli
+z těchto stavů do normálu vytvoří jediné oznámení o obnovení. Chyby přihlášení
+řeší standardním procesem opětovné autentizace.
 
-Notification transition flags survive a Home Assistant restart, so an unchanged
-problem does not create duplicate alerts. The state contains no portal or
-customer data, and its persistence is best effort: a storage failure never
-prevents an otherwise valid portal update.
+Každé úspěšné stažení se spojí s odečty, které už byly během běhu integrace získány. Vnitřní hodinové mezery v **aktuálním rozsahu odpovědi portálu** vyvolají až dva opakované požadavky s nastavitelnou prodlevou. Historické mezery zjištěné samostatným backfillem se nehlásí jako výpadek aktuálního stažení, protože běžný požadavek portálu je nemůže opravit. Opravená hodnota portálu nahradí starší hodnotu se stejnou časovou značkou. Pokud mezery aktuálního rozsahu po těchto pokusech zůstanou, jediné trvalé oznámení uvede jejich počet a krátký přehled časů; po jejich doplnění vznikne jediné oznámení o obnově. Neexistující 02:00 při českém přechodu na letní čas se za chybějící odečet nepovažuje. Prahy, oznámení, počet pokusů i prodlevy lze změnit přes **Přenastavit**.
 
-All portal transfers are serialized, including normal polling, historical
-backfill and the device download tests. When an established session expires,
-the client creates one fresh session and replays the complete request; rejected
-credentials and a second expiry still use Home Assistant's normal
-reauthentication flow. Consecutive failed **automatic** updates use a bounded
-exponential retry delay. This does not delay the **Test download** button.
+Stav přechodů upozornění přežije restart Home Assistantu, takže stejný problém
+nevytvoří duplicitní upozornění. Stav neobsahuje údaje z portálu ani údaje o
+zákazníkovi a jeho uložení je pomocné: selhání úložiště nikdy nezabrání jinak
+platné aktualizaci portálu.
 
-## Troubleshooting
+Všechny přenosy z portálu se řadí za sebe, včetně běžné aktualizace,
+historického doplňování a testu stažení ze zařízení. Při vypršení dříve platné
+relace klient jednou vytvoří novou relaci a zopakuje celý požadavek; odmítnuté
+přihlašovací údaje nebo druhé vypršení stále použijí běžné opětovné ověření
+Home Assistantu. Po po sobě jdoucích neúspěšných **automatických**
+aktualizacích se prodleva pokusu postupně, nejvýše do jedné hodiny, prodlouží.
+Tlačítko **Otestovat stažení** se tím nezdržuje.
 
-| Situation | Meaning and recommended action |
+## Řešení potíží
+
+| Situace | Význam a doporučený postup |
 | --- | --- |
-| `Data available through` is old | It is the newest timestamp actually returned by VS Chrudim. Old portal data is not automatically a failed update. |
-| `Source status` is `authentication_required` | Complete Home Assistant reauthentication with valid portal credentials. |
-| `Source status` is `error` | Check **Last update attempt**, then use **Test download**. The integration preserves the last valid readings while the portal request is retried. |
-| Missing hourly readings remain | Use **Retry history download** after the portal has published the missing data. The button does not clear or rebuild Energy statistics. |
-| Energy Dashboard totals are wrong after an older installation | Verify the selected integration-owned **Water consumption** and **Water cost** statistics, then use the confirmed rebuild procedure only if required. |
+| `Data stažena do` je starší | Jde o nejnovější čas skutečně vrácený portálem VS Chrudim. Starší data sama o sobě neznamenají chybu aktualizace. |
+| `Stav zdroje` je `authentication_required` | Dokončete opětovné přihlášení Home Assistantu platnými údaji portálu. |
+| `Stav zdroje` je `error` | Zkontrolujte **Last update attempt**, potom použijte **Otestovat stažení**. Integrace ponechá poslední platné odečty a požadavek zkusí znovu. |
+| Zůstávají chybějící hodinové odečty | Až portál data zveřejní, použijte **Zkusit doplnit data**. Tlačítko nemaže ani neobnovuje statistiky Energie. |
+| Součty v panelu Energie jsou po starší instalaci chybné | Ověřte vybrané integrační statistiky **Water consumption** a **Water cost**; potvrzenou obnovu spusťte pouze, je-li opravdu nutná. |
 
-The single **Validate** workflow runs unit tests, Home Assistant compatibility
-checks, Hassfest, and HACS validation. Its badges above show the status of that
-complete release gate.
+Jediný workflow **Validate** spouští jednotkové testy, kontroly kompatibility
+Home Assistantu, Hassfest i validaci HACS. Badge nahoře ukazují stav této
+kompletní brány před vydáním.
 
-## Portal compatibility
+## Kompatibilita s portálem
 
-VS Chrudim supplies an authenticated ASP.NET WebForms website, not a documented public API. The client follows fields, menu links, WebForms postbacks and CSV-export links found in the authenticated HTML, and fails safely when the expected structure is absent. It does not guess REST endpoints or run WebDownloader.
+VS Chrudim poskytuje autentizovaný web ASP.NET WebForms, nikoli zdokumentované
+veřejné API. Klient následuje pole formulářů, odkazy v menu, WebForms postbacky
+a odkazy pro CSV export nalezené v přihlášeném HTML. U naměřených stavů podporuje
+ověřené přímé CSV odkazy, dokumentované WebForms ovladače odeslání, ověřené
+exportní LinkButtony `__doPostBack` a deterministickou záložní tabulku s českými
+záhlavími data a stavu vodoměru. Libovolný JavaScript nikdy nespouští. Pokud
+očekávanou strukturu nenajde, bezpečně skončí s chybou; nevymýšlí REST endpointy
+a nespouští WebDownloader.
 
-If the portal skips its consumption-place list and opens a previously selected
-reporting/detail context directly, the integration continues through that
-context only after its portal identifiers match the configured consumption
-place. The confirmation accepts the portal's stable ASP.NET control suffix in
-either its form `name` or HTML `id` (including rendered text); an absent,
-unverified grid is never treated as permission to use another place's data.
+Pokud portál přeskočí seznam odběrných míst a otevře rovnou dříve vybraný
+reporting/detail, integrace přes něj pokračuje pouze tehdy, když portálové
+identifikátory odpovídají nakonfigurovanému odběrnému místu. Potvrzení přijme
+stabilní ASP.NET příponu ovladače ve formulářovém `name` i HTML `id` včetně
+zobrazeného textu; chybějící neověřená tabulka nikdy neopravňuje použít data
+jiného místa.
 
-The portal's current custom-range controls are required for historical backfill.
-For measured-state downloads the integration supports verified direct CSV
-links, documented WebForms submit controls, verified `__doPostBack` export
-LinkButtons, and a deterministic table fallback with Czech date and meter-state
-headings. It never runs arbitrary JavaScript. If the provider changes or
-removes all usable structures, normal polling remains isolated from the failed
-backfill and the diagnostic status reports the protocol error.
+Pro zpětné načtení historie jsou potřeba aktuální prvky vlastního období portálu. Pokud je provozovatel změní nebo odstraní, běžné aktualizace zůstanou odděleny od chybného doplnění historie a diagnostický stav uvede chybu protokolu.
 
-Each portal HTTP request has a 45-second deadline and accepts at most 12 MiB of
-response data. These guards fail a malformed or stalled response safely without
-changing normal polling, backfill or Energy-statistics processing. A running
-backfill is cancelled and checkpoints its progress when the integration is
-unloaded, then resumes from that checkpoint after setup.
+Každý HTTP požadavek na portál má limit 45 sekund a přijme nejvýše 12 MiB
+odpovědi. Tyto pojistky bezpečně ukončí zaseknutou nebo neobvykle velkou
+odpověď, aniž mění běžné stahování, backfill nebo zpracování statistik Energie.
+Při odinstalování integrace se běžící backfill zastaví, uloží postup a po dalším
+nastavení pokračuje od uloženého místa.
 
-Downloaded diagnostics describe recognized page structures only with a fixed
-safe vocabulary (such as `webforms_form`, `csv_export_postback` and
-`html_table`). They also report non-blocking quality flags such as a lower
-meter register. Neither diagnostic includes HTML, control names or values,
-portal URLs, credentials or customer identifiers.
+Stažená diagnostika popisuje rozpoznané struktury stránky pouze pevnou,
+bezpečnou slovní zásobou (například `webforms_form`, `csv_export_postback` a
+`html_table`). Dále uvádí neblokující příznaky kvality, například pokles stavu
+vodoměru. Diagnostika neobsahuje HTML, názvy ani hodnoty ovladačů, URL portálu,
+přihlašovací údaje ani identifikátory zákazníka.
 
-## Security
+## Bezpečnost
 
-The username and password are stored in the Home Assistant ConfigEntry (and therefore may be present in an encrypted Home Assistant backup). Session cookies are not persisted; tokens and credentials are redacted from diagnostics and never logged.
+Uživatelské jméno a heslo jsou uloženy v ConfigEntry Home Assistantu, a mohou proto být součástí šifrované zálohy Home Assistantu. Session cookies se neukládají; tokeny a přihlašovací údaje jsou z diagnostiky odstraněny a nikdy se nezapisují do logu.
 
-Brand icons are shipped inside `custom_components/vschrudim_watermeter/brand/`, which is the current Home Assistant inline-brand location. Home Assistant displays them locally. Some HACS versions still show a placeholder for custom repositories because their downloads panel has not yet adopted Home Assistant's authenticated local brands proxy; the icon files are nevertheless included in every release and installation.
+Brand ikony jsou součástí `custom_components/vschrudim_watermeter/brand/`, což je aktuální umístění pro lokální značku Home Assistantu. Home Assistant je zobrazuje lokálně. Některé verze HACS mohou u vlastních repozitářů stále zobrazovat náhradní ikonu, protože jejich přehled stahování zatím nepoužívá lokální proxy pro značku Home Assistantu; soubory ikon jsou přesto součástí každé instalace i vydání.
 
-## Disclaimer
+## Prohlášení
 
-This integration is independent and is not an official product of, or supported by, Vodárenská společnost Chrudim. The web interface used by it is not publicly guaranteed and may change without notice.
+Integrace je nezávislá a není oficiálním produktem ani podporovanou službou Vodárenské společnosti Chrudim. Používané webové rozhraní není veřejně garantováno a může se bez upozornění změnit.
 
-## License
+## Licence
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](LICENSE)
 
-This project is licensed under the GNU General Public License v3.0, version 3 only (**GPL-3.0-only**). See [LICENSE](LICENSE) for details.
+Tento projekt je licencován pod GNU General Public License v3.0, pouze verze 3 (**GPL-3.0-only**). Podrobnosti jsou v [LICENSE](LICENSE).
 
 Copyright (c) 2026 Jiří Dvořák (79thales).
 
-Previously released MIT versions retain their original license. This change applies to this and subsequent releases.
+Dříve zveřejněné verze pod MIT zůstávají pod původní licencí. Změna platí pro toto a následující vydání.

@@ -1,52 +1,28 @@
-# Release installer
+# Instalační balíček vydání
 
-`build_release.py` builds `dist/vschrudim_watermeter.zip` with integration files directly at
-the archive root, as required by HACS `zip_release`. It uses `git archive` on the
-selected commit's `custom_components/vschrudim_watermeter` tree, never the working directory.
-Uncommitted edits, local credentials, exports, caches and repository metadata are
-not included. Keep private data out of Git as well; the repository privacy tests
-remain part of validation.
+`build_release.py` sestaví `dist/vschrudim_watermeter.zip` se soubory integrace přímo v kořeni archivu, jak vyžaduje `zip_release` v HACS. Používá `git archive` pro strom `custom_components/vschrudim_watermeter` vybraného commitu, nikoli pracovní adresář. Nezahrne necommitované změny, místní přihlašovací údaje, exporty, cache ani metadata repozitáře. Soukromé údaje neukládejte ani do Gitu; součástí validace zůstávají testy soukromí.
 
-Local verification, without uploading or publishing:
+Místní ověření bez nahrání nebo zveřejnění:
 
 ```shell
 python -m unittest discover -s tests -v
 python scripts/build_release.py --ref HEAD
 ```
 
-## Preparing a new release
+## Příprava nového vydání
 
-HACS reads documentation from the installed release tag. README changes that
-must appear in HACS therefore need a new patch release, even if no functional
-code changed. Commit the README before creating the new tag; do not move older
-tags or overwrite their assets. Release CI checks the shared README header in
-the tagged checkout.
+HACS načítá dokumentaci z tagu nainstalovaného vydání. Aby se změny README zobrazily v HACS, potřebují nové opravné vydání i bez změn funkčního kódu. README commitněte před vytvořením tagu; starší tagy nepřesouvejte ani nepřepisujte jejich přílohy. CI vydání kontroluje společnou hlavičku README v příslušném tagu.
 
-1. Update `manifest.json` and add a matching version section to `CHANGELOG.md`,
-   preserving both `### Čeština` and `### English`. Commit the changes and pass
-   the **Validate** workflow, including HACS and Hassfest.
-2. Push the corresponding `vX.Y.Z` tag. **Prepare release installer** checks out
-   that exact tag, runs tests, verifies the manifest version and builds the ZIP.
-3. The workflow attaches the ZIP to a **draft** release and copies the matching
-   bilingual changelog section into its notes. It does not publish the release.
-4. Review the draft's notes and ensure `vschrudim_watermeter.zip` is attached and the
-   workflow succeeded. Only then publish the draft. Do not publish an empty
-   release first: HACS expects the configured ZIP to be available immediately.
+1. Aktualizujte `manifest.json` a přidejte odpovídající oddíl verze do `CHANGELOG.md` se sekcí `### Čeština`. Změny commitněte a ověřte úspěšný běh **Validate**, včetně HACS a Hassfest.
+2. Odešlete odpovídající tag `vX.Y.Z`. **Prepare release installer** načte přesně tento tag, spustí testy, ověří verzi manifestu a sestaví ZIP.
+3. Workflow připojí ZIP ke konceptu vydání a zkopíruje do poznámek příslušný oddíl changelogu. Vydání nezveřejní.
+4. Zkontrolujte poznámky konceptu, přílohu `vschrudim_watermeter.zip` a úspěšné dokončení workflow. Teprve potom koncept zveřejněte. Nezveřejňujte nejprve prázdné vydání: HACS očekává ZIP ihned.
 
-The workflow can also be run manually with an existing tag that contains these
-packaging scripts. It will reuse an identical asset on a draft but will not
-overwrite a different asset or modify a published release. Removing/replacing a
-GitHub release asset resets its download count; keep published assets intact.
+Workflow lze také spustit ručně nad existujícím tagem obsahujícím tyto balicí skripty. Shodnou přílohu konceptu znovu použije, odlišnou však nepřepíše a zveřejněné vydání nezmění. Odebrání nebo nahrazení přílohy na GitHubu vynuluje její počítadlo stažení; zveřejněné přílohy zachovejte.
 
-Existing tags are not rewritten. Older releases retain their original `hacs.json`
-and source-archive installation path. Default-branch installations are still
-supported but do not count as installer downloads.
+Existující tagy se nepřepisují. Starší vydání si zachovávají původní `hacs.json` a způsob instalace ze zdrojového archivu. Instalace z výchozí větve jsou nadále podporované, ale nezapočítávají se jako stažení instalátoru.
 
-The README badges filter by the exact asset filename, `vschrudim_watermeter.zip`, so future
-dashboard samples or other attachments do not inflate the installer count. The
-latest-release badge and HACS's download indicator cover one release; the total
-badge combines installer downloads across releases. Neither metric identifies
-unique users or active installations, and no integration telemetry is involved.
+Odznaky README filtrují přesný název přílohy `vschrudim_watermeter.zip`, takže případné ukázky panelů či jiné přílohy nezvyšují počet instalátorů. Odznak posledního vydání a ukazatel HACS sledují jedno vydání; celkový odznak sčítá stažení instalátoru napříč vydáními. Žádná z metrik neurčuje počet jedinečných uživatelů ani aktivních instalací a integrace neposílá telemetrii.
 
 ## Ověření aktuální stabilní verze Home Assistantu
 
