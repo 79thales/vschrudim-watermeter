@@ -58,8 +58,13 @@ jobs:
             test-plugin-version: "0.13.363"
           - home-assistant-version: "2026.10.2"
             test-plugin-version: "0.13.373"
+          - home-assistant-version: "2026.10.4"
+            test-plugin-version: "0.13.375"
     steps:
       - uses: actions/checkout@v6
+        # Tento samostatný QA běh ověřuje přesný vydávaný tag, ne větev QA.
+        with:
+          ref: v0.4.28
       - uses: actions/setup-python@v6
         with:
           python-version: "3.14"
@@ -67,6 +72,7 @@ jobs:
           python -m pip install
           "homeassistant==${{ matrix.home-assistant-version }}"
           "pytest-homeassistant-custom-component==${{ matrix.test-plugin-version }}"
+      - run: python -m pip check
       - run: python -m unittest discover -s tests -v
       - name: Test real config flows and registry preservation
         run: python -m pytest -q tests_homeassistant
