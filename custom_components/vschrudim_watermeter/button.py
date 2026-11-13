@@ -1,6 +1,7 @@
 """Maintenance buttons for VSChrudim watermeter."""
 from __future__ import annotations
 
+from homeassistant.components import persistent_notification
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
@@ -25,6 +26,7 @@ async def async_setup_entry(
             RetryHistoryDownloadButton(entry.runtime_data),
             CheckEnergyStatisticsButton(entry.runtime_data),
             RebuildEnergyStatisticsButton(entry.runtime_data),
+            GenerateDashboardButton(entry.runtime_data),
         ]
     )
 
@@ -61,6 +63,42 @@ class RetryHistoryDownloadButton(
     async def async_press(self) -> None:
         """Download current data, then resume or restart history reconciliation."""
         await self.coordinator.async_retry_history_download()
+
+
+class GenerateDashboardButton(CoordinatorEntity[VsChrudimCoordinator], ButtonEntity):
+    """Nabídnout odkaz pro správce; stisk nespouští stahování ani zápis statistik."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "generate_dashboard"
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_icon = "mdi:view-dashboard-edit"
+
+    def __init__(self, coordinator: VsChrudimCoordinator) -> None:
+        super().__init__(coordinator)
+        identifier = coordinator.place.identifier
+        self._attr_unique_id = f"{identifier}_generate_dashboard"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, identifier)},
+            name=coordinator.place.address or f"VS Chrudim {identifier}",
+            manufacturer="Vodárenská společnost Chrudim",
+            model="Smart water meter",
+        )
+
+    @property
+    def available(self) -> bool:
+        """Panel lze nabídnout i při dočasné nedostupnosti portálu."""
+        return True
+
+    async def async_press(self) -> None:
+        """Vytvořit jen místní oznámení s odkazem; vlastní panel vyžaduje správce."""
+        from .dashboard import PANEL_PATH
+
+        persistent_notification.async_create(
+            self.hass,
+            f"[Otevřít generátor dashboardu](/{PANEL_PATH}?entry_id={self.coordinator.entry.entry_id})",
+            title="VSChrudim – generátor dashboardu",
+            notification_id=f"{DOMAIN}_dashboard_{self.coordinator.entry.entry_id}",
+        )
 
 
 class TestDownloadButton(CoordinatorEntity[VsChrudimCoordinator], ButtonEntity):

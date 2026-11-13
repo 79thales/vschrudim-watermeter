@@ -1,0 +1,27 @@
+{
+  "views": [
+    {
+      "title": "",
+      "path": "",
+      "icon": "mdi:water",
+      "show_icon_and_title": true,
+      "type": "sections",
+      "max_columns": 2,
+      "sections": [
+        {"type": "grid", "cards": []},
+        {"type": "grid", "cards": []}
+      ]
+    },
+    {
+      "title": "",
+      "path": "",
+      "subview": true,
+      "type": "sections",
+      "max_columns": 2,
+      "sections": [
+        {"type": "grid", "cards": []},
+        {"type": "grid", "cards": []}
+      ]
+    }
+  ]
+}

@@ -37,6 +37,15 @@
       "reconfigure_successful": "Nastavení bylo aktualizováno"
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Dashboard vody",
+        "description": "[Otevřít generátor dashboardu]({url}). Použít ho může pouze správce Home Assistantu."
+      }
+    },
+    "abort": {"dashboard_closed": "Nastavení integrace se nezměnilo"}
+  },
   "entity": {
     "sensor": {
       "meter_state": {"name": "Stav vodoměru"},
@@ -57,6 +66,7 @@
       "meter_register_status": {"name": "Stav registru vodoměru"}
     },
     "button": {
+      "generate_dashboard": {"name": "Vytvořit dashboard"},
       "test_download": {"name": "Otestovat stažení"},
       "retry_history_download": {"name": "Zkusit doplnit data"},
       "check_energy_statistics": {"name": "Zkontrolovat statistiky Energie"},

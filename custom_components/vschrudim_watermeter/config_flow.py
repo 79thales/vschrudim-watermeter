@@ -1,13 +1,22 @@
 """Config and reauthentication flow."""
 from __future__ import annotations
+
 from collections.abc import Mapping
 from dataclasses import asdict
+
 import aiohttp
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
+from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
-from .api import VsChrudimAuthError, VsChrudimClient, VsChrudimConnectionError, VsChrudimError
+
+from .api import (
+    VsChrudimAuthError,
+    VsChrudimClient,
+    VsChrudimConnectionError,
+    VsChrudimError,
+)
 from .const import (
     CONF_FAILURE_THRESHOLD,
     CONF_MISSING_RETRY_ATTEMPTS,
@@ -30,9 +39,16 @@ from .const import (
     MIN_SCAN_INTERVAL,
 )
 
+
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
     MINOR_VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry):
+        """Samostatný odkaz nenahrazuje stávající reconfigure ani reauth."""
+        return DashboardOptionsFlow(config_entry)
     def __init__(self) -> None:
         self._credentials: dict[str, str] = {}
         self._places = []
@@ -142,4 +158,23 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Required(CONF_SOURCE_DELAY_WARNING_HOURS, default=entry.options.get(CONF_SOURCE_DELAY_WARNING_HOURS, DEFAULT_SOURCE_DELAY_WARNING_HOURS)): vol.All(vol.Coerce(int), vol.Range(min=0, max=8760)),
                 }
             ),
+        )
+
+
+class DashboardOptionsFlow(config_entries.OptionsFlow):
+    """Otevřít pomocný panel bez změny uložených nastavení integrace."""
+
+    def __init__(self, entry) -> None:
+        self._entry = entry
+
+    async def async_step_init(self, user_input=None):
+        """Zobrazit bezpečný odkaz, po zavření toku nic neukládat."""
+        if user_input is not None:
+            return self.async_abort(reason="dashboard_closed")
+        from .dashboard import PANEL_PATH
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema({}),
+            description_placeholders={"url": f"/{PANEL_PATH}?entry_id={self._entry.entry_id}"},
         )
