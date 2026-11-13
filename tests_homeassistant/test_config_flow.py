@@ -5,18 +5,18 @@ a v čistých testech toku setup/reload; logika ConfigFlow ani pomocné metody
 HA se nenahrazují. Zvláštní test spouští skutečný setup, reload a registry.
 """
 
+import json
 from copy import deepcopy
 from dataclasses import asdict
 from datetime import datetime
-import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.data_entry_flow import FlowResultType
-from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.json import json_dumps
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -349,7 +349,9 @@ async def test_real_reload_preserves_entity_and_device_registries(hass, entry, p
             item.id: (item.identifiers, item.config_entry_id)
             for item in dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)
         }
-        assert len(before) == 20  # 16 senzorů a 4 tlačítka existující integrace.
+        # Původních 20 entit a nové tlačítko pro odkaz na generátor.
+        assert len(before) == 21
+        assert any(data[1] == "place-a_generate_dashboard" for data in before.values())
         result = await select_place(hass, await authenticate(hass, await start_reauth(hass, entry)))
         assert result["reason"] == "reauth_successful"
         assert entry.state is ConfigEntryState.LOADED

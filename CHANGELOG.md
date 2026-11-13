@@ -1,5 +1,14 @@
 # Přehled změn
 
+## 0.4.29 – 2026-11-13
+
+### Čeština
+
+- Přidán generátor samostatné záložky vody v horní liště Přehledu s detailní podstránkou, náhledem a výslovným potvrzením zápisu.
+- Volitelné porovnání využívá existující statistiky integrace rovocz pro potvrzeně stejný vodoměr a rozlišuje chybějící údaje od nulové spotřeby.
+- Generátor nemění odečty ani statistiky; zachovává stávající entity a umožňuje použití bez druhé integrace.
+- Testy pro HA 2026.8, 2026.9 a 2026.10, HACS a Hassfest prošly. Úplné integrační testy HA 2026.11.1 zůstávají neověřené: dostupný testovací plugin vyžaduje HA 2026.10.4.
+
 ## 0.4.28 – 2026-11-04
 
 ### Čeština

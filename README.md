@@ -174,6 +174,51 @@ stažení**, **Zkusit doplnit data** a **Zkontrolovat statistiky Energie** jsou
 bezpečné diagnostické akce. **Obnovit statistiky Energie** je potvrzená údržba
 popsaná níže.
 
+## Vlastní záložka vody v horní liště
+
+Integrace obsahuje generátor samostatného pohledu pro horní lištu existujícího
+dashboardu **Přehled**. Přidá záložku s vodoměrem a detailní podstránku;
+nezakládá samostatný dashboard v boční nabídce. Funkce vyžaduje účet správce
+Home Assistantu.
+
+1. Na stránce zařízení vodoměru stiskněte **Vytvořit dashboard** a otevřete
+   odkaz v oznámení. Generátor lze otevřít také přes nastavení integrace.
+2. Vyberte odběrné místo, název záložky, adresu pohledu a jazyk. Případné
+   přejmenování entit generátor zjistí z registru Home Assistantu.
+3. Zvolte **Přidat do horní lišty Přehledu** a stiskněte **Připravit náhled**.
+   Náhled obsahuje i úplný YAML nových pohledů ke zkopírování nebo stažení.
+4. Zkontrolujte výsledek, zaškrtněte potvrzení a stiskněte **Provést potvrzený
+   zápis**. Hotová záložka se objeví vedle ostatních pohledů v horní liště.
+
+Záložka zobrazuje stav vodoměru, poslední odečet portálu a samostatně čas
+posledního pokusu i úspěšného stažení. Poslední spotřeba je rozdíl odečtů,
+nikoli okamžitý průtok. Denní, měsíční a roční souhrny i grafy používají
+existující statistiky integrace. Aktuální období či období s mezerami může být
+neúplné; stáří posledního údaje samo o sobě neznamená chybu portálu.
+
+Je-li dostupná odpovídající statistika samostatné integrace `rovocz`, lze ji
+volitelně vybrat a potvrdit, že jde o stejný fyzický vodoměr. Bez potvrzení se
+zdroje nepárují. Pokud druhá integrace nemá uložené statistiky, běžný přehled
+funguje dál. Srovnávací karta čte stávající hodinové body Recorderu a uvádí
+společné pokrytí, rozdíly a neúplná období po hodinách, dnech, měsících a
+letech. Časy souhrnů používají `Europe/Prague`; chybějící hodnoty nejsou
+nulová spotřeba. Původ případných pomocných kotevních bodů není automaticky
+znám. Export JSON používá označení zdrojů A/B bez identifikátorů či adres;
+samotné odečty v souboru jsou stále soukromé údaje.
+
+Náhled se nepřihlašuje k portálu, nestahuje nové odečty a nemění nastavení
+Energie ani statistiky. Při potvrzeném přidání srovnání se podle potřeby
+zaregistruje přibalená místní Lovelace karta. Pokud jsou zdroje Lovelace
+spravovány v YAML, přidejte ji ručně jako **JavaScript module** pomocí adresy
+zobrazené v náhledu. Při ručním vkládání nepřepisujte existující konfiguraci:
+oba nové pohledy přidejte do jejího seznamu `views`.
+
+Generátor odmítne kolizi adres i změnu konfigurace zjištěnou před zápisem a při
+nejasné odpovědi nic automaticky nemaže. Home Assistant neposkytuje atomické
+porovnání a zápis celé konfigurace, proto během přidávání neupravujte stejný
+dashboard v jiném okně. Při YAML režimu nebo automaticky vytvářeném Přehledu
+použijte náhled a ruční postup místo vynuceného přepisu.
+
 ## Diagnostika, historie a obnova
 
 Po nastavení integrace automaticky prohledá až tři kalendářní roky zpět, včetně obou krajních dat, v 31denních blocích. Každý odečet zůstává samostatnou hodinovou statistikou; bloky pouze snižují počet požadavků na portál a data neagregují. Integrace používá stejná vlastní datumová pole ASP.NET WebForms jako WebDownloader, upřednostňuje ověřenou CSV odpověď a pokud portál nabídku exportu nezobrazí, načte vykreslenou tabulku naměřených stavů.

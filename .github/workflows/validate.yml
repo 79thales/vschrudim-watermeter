@@ -33,6 +33,12 @@ jobs:
           plugin_requirement="$(python scripts/latest_ha_requirement.py --test-plugin-for "$HA_REQUIREMENT")"
           python -m pip install "$HA_REQUIREMENT" "$plugin_requirement"
           python -m pip check
+      - name: Install the frontend pinned by the tested HA
+        run: |
+          # Test načítá skutečný frontend, který základní balík HA neinstaluje.
+          frontend_requirement="$(python -c 'import json, pathlib, homeassistant; p = pathlib.Path(homeassistant.__file__).parent / "components/frontend/manifest.json"; print(next(x for x in json.loads(p.read_text())["requirements"] if x.startswith("home-assistant-frontend==")))')"
+          python -m pip install "$frontend_requirement"
+          python -m pip check
       - name: Test real config flows and registry preservation on latest stable HA
         run: python -m pytest -q tests_homeassistant
 
@@ -43,8 +49,13 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
       - run: python -m compileall -q custom_components scripts
       - run: python -m unittest discover -s tests -v
+      - name: Test bezpečného generování horní záložky
+        run: node --test tests/test_dashboard_frontend.mjs
   home-assistant-compatibility:
     runs-on: ubuntu-latest
     strategy:
@@ -67,6 +78,12 @@ jobs:
           python -m pip install
           "homeassistant==${{ matrix.home-assistant-version }}"
           "pytest-homeassistant-custom-component==${{ matrix.test-plugin-version }}"
+      - name: Install the frontend pinned by the tested HA
+        run: |
+          # Verzi přebíráme z manifestu právě nainstalovaného Home Assistantu.
+          frontend_requirement="$(python -c 'import json, pathlib, homeassistant; p = pathlib.Path(homeassistant.__file__).parent / "components/frontend/manifest.json"; print(next(x for x in json.loads(p.read_text())["requirements"] if x.startswith("home-assistant-frontend==")))')"
+          python -m pip install "$frontend_requirement"
+          python -m pip check
       - run: python -m unittest discover -s tests -v
       - name: Test real config flows and registry preservation
         run: python -m pytest -q tests_homeassistant
