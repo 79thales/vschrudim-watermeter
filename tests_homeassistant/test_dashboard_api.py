@@ -290,9 +290,12 @@ async def test_real_recorder_missing_hour_and_late_recovery_on_dst_day(
     assert after["result"]["difference_litres"] == pytest.approx(0)
 
 
-async def test_late_frontend_registers_one_hidden_admin_panel(hass, hass_ws_client):
+async def test_late_frontend_registers_one_hidden_admin_panel(hass):
     """Později načtený frontend nesmí zablokovat integraci ani vytvořit sidebar."""
-    await hass_ws_client()
+    # Registrace websocket příkazů nepotřebuje spuštěný HTTP server. Skutečné
+    # spuštění serveru by před načtením frontendu zmrazilo router a HA by už
+    # nemohl přidat své vlastní routy, což neodpovídá pořadí startu v HA.
+    assert await async_setup_component(hass, "websocket_api", {})
     await async_setup_dashboard_generator(hass)
     state = hass.data[f"{DOMAIN}.dashboard_registration"]
     assert not state.get("panel")
