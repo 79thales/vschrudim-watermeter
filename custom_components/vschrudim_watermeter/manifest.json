@@ -1,9 +1,9 @@
 {
   "domain": "vschrudim_watermeter",
   "name": "VSChrudim watermeter",
+  "after_dependencies": ["http"],
   "codeowners": ["@79thales"],
   "config_flow": true,
-  "after_dependencies": ["http"],
   "dependencies": ["persistent_notification", "recorder"],
   "documentation": "https://github.com/79thales/vschrudim-watermeter",
   "integration_type": "service",
