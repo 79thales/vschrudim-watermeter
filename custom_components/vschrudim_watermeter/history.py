@@ -19,24 +19,23 @@ from .calculation import total_cost
 from .const import DOMAIN
 from .models import MeterReading
 
+def history_ranges_backwards(date_from, date_to, *, days_per_request=31):
+    """Split an inclusive date interval into newest-first portal requests.
 
-def history_ranges_backwards(
-    date_from: date,
-    date_to: date,
-    *,
-    days_per_request: int = 31,
-) -> tuple[tuple[date, date], ...]:
-    """Split an inclusive date interval into newest-first portal requests."""
+    Neighbouring ranges overlap by one day because the portal may return
+    only a partial last day for a custom range.
+    """
     if date_to < date_from:
         return ()
-    ranges: list[tuple[date, date]] = []
+    ranges = []
     cursor = date_to
     while cursor >= date_from:
         chunk_from = max(date_from, cursor - timedelta(days=days_per_request - 1))
         ranges.append((chunk_from, cursor))
-        cursor = chunk_from - timedelta(days=1)
+        if chunk_from == date_from:
+            break
+        cursor = chunk_from  # was: chunk_from - timedelta(days=1)
     return tuple(ranges)
-
 
 def meter_statistics(
     readings: Iterable[MeterReading],
