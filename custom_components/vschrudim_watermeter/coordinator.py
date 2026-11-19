@@ -1677,7 +1677,7 @@ class VsChrudimCoordinator(DataUpdateCoordinator[WaterMeterData]):
                         or earliest < self.history_earliest_date
                     ):
                         self.history_earliest_date = earliest
-                self.history_backfill_cursor = chunk_from - timedelta(days=1)
+                self.history_backfill_cursor = chunk_from
                 self.history_backfill_processed_chunks += 1
                 await self._async_save_history_state()
                 self.async_update_listeners()
